@@ -1,0 +1,32 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Frontend build
+php/frontend/dist/
+php/frontend/.vite/
+
+# Local uploads / logs / caches
+uploads/
+logs/
+.mysql/
+.mysql_data/
+.phpunit.result.cache
+
+# Backups
+.backups/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+
+# IDE
+.vscode/
+
+# Ignore npm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

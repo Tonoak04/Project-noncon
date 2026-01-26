@@ -1,0 +1,39 @@
+﻿HTTP/1.1 200 OK
+Date: Mon, 08 Dec 2025 08:52:45 GMT
+Server: Apache/2.4.65 (Debian)
+X-Powered-By: PHP/8.2.29
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Content-Length: 1243
+Content-Type: application/json
+
+{
+    "item": {
+        "Machine_Id": 2,
+        "Machine_Type": "Heavy",
+        "Company_code": "2000",
+        "Name": "\u0e17\u0e25.3901\u0e15\u0e2d\u0e192.2_2000",
+        "Equipment": "AD-011",
+        "Description": "\u0e23\u0e16\u0e23\u0e32\u0e14\u0e22\u0e32\u0e07 6 \u0e25\u0e49\u0e2d NISSAN/HANTA",
+        "Status": "Stand by/\u0e23\u0e2d\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19",
+        "Specification": "\u0e40\u0e2a\u0e23\u0e34\u0e21 \u0e0a\u0e38\u0e141+2 \u0e2a\u0e33\u0e23\u0e2d\u0e07",
+        "Chassis_Number": "CLG87F-00816",
+        "Engine_Serial_Number": "FE6-047772B",
+        "Engine_Model": "NISSAN-FE6",
+        "Engine_Power": "180",
+        "Engine_Capacity": "0",
+        "License_plate_Number": "91-7918 \u0e01\u0e17\u0e21.",
+        "Tax": null,
+        "Insurance": "2569-12-31",
+        "Duties": 3400,
+        "Note": "GPS:MAPPOINT",
+        "Class": "AD",
+        "Assest_Number": "231000000000",
+        "Manufacture": "\u0e1a\u0e08\u0e01.\u0e1b\u0e23\u0e30\u0e27\u0e35\u0e01\u0e34\u0e08 \u0e21\u0e2b\u0e32\u0e19\u0e04\u0e23",
+        "Keyword": "\u0e23\u0e16\u0e25\u0e32\u0e14\u0e22\u0e32\u0e07",
+        "Image": null,
+        "Registered": "2539-02-16",
+        "MCCreated_at": "2025-12-08 06:16:11"
+    }
+}

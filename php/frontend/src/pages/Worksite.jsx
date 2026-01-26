@@ -1,0 +1,69 @@
+import { useNavigate } from 'react-router-dom';
+
+const actionCards = [
+    {
+        id: 'machines',
+        title: 'ข้อมูลเครื่องจักร',
+        cta: 'ดูเครื่องจักร',
+        icon: 'https://cdn-icons-png.flaticon.com/512/11242/11242072.png',
+        description: 'ดูเครื่องจักรทั้งหมด',
+        to: '/categories',
+    },
+    {
+        id: 'scanner',
+        title: 'เครื่องอ่านบาร์โค้ด',
+        cta: 'สแกน',
+        icon: 'https://cdn-icons-png.flaticon.com/512/7463/7463734.png',
+        description: 'สแกนเพื่อค้นหาเครื่องจักรอย่างรวดเร็ว',
+        to: '/scanner',
+    },
+    {
+        id: 'oil-log',
+        title: 'บันทึกน้ำมัน',
+        cta: 'เปิดบันทึก',
+        icon: 'https://cdn-icons-png.flaticon.com/512/2966/2966425.png',
+        description: 'จดปริมาณการใช้น้ำมันของแต่ละเครื่อง',
+        to: '/oil-log',
+    },
+    {
+        id: 'reports',
+        title: 'รายงานปัญหา',
+        cta: 'รายงานปัญหา',
+        icon: 'https://cdn-icons-png.flaticon.com/512/1828/1828911.png',
+        description: 'รายงานปัญหาหรือข้อเสนอแนะต่างๆ',
+        to: '/reports',
+    },
+    {
+        id: 'checklist',
+        title: 'แบบฟอร์มตรวจเช็ก',
+        cta: 'เปิดฟอร์ม',
+        icon: 'https://cdn-icons-png.flaticon.com/512/942/942748.png',
+        description: 'เช็กลิสต์การบำรุงรักษาประจำวัน',
+        to: '/checklist',
+    },
+];
+
+export default function Worksite() {
+    const navigate = useNavigate();
+
+    const handleSelect = (to) => {
+        navigate(to);
+    };
+
+    return (
+        <div className="portal">
+            <section className="action-card-grid">
+                {actionCards.map((card) => (
+                    <button type="button" className="action-card" key={card.id} onClick={() => handleSelect(card.to)}>
+                        <img src={card.icon} alt="icon" />
+                        <div>
+                            <h3>{card.title}</h3>
+                            <p>{card.description}</p>
+                            <span className="category-link">{card.cta}</span>
+                        </div>
+                    </button>
+                ))}
+            </section>
+        </div>
+    );
+}
