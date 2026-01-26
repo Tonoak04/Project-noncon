@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 
 export default defineConfig({
-    base: '/frontend/dist/',
+    base: '/',
     plugins: [react()],
     root: resolve(__dirname),
     server: {
