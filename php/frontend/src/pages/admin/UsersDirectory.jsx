@@ -179,9 +179,6 @@ export default function UsersDirectory() {
                                     {renderActions(user)}
                                     <div className="users-directory__identity-body">
                                         <div className="users-directory__identity-head">
-                                            <div className="users-directory__avatar">
-                                                {(user.fullName || user.username || '?').slice(0, 2).toUpperCase()}
-                                            </div>
                                             <div>
                                                 <strong>{user.fullName || user.username || '-'}</strong>
                                                 <div className="muted">{user.username} · #{user.employeeId || '-'}</div>
@@ -263,36 +260,6 @@ export default function UsersDirectory() {
                     </button>
                 </div>
             </section>
-            <section className="floating-panel users-directory__hero-card">
-                <div className="users-directory__hero-copy">
-                    <span className="muted">บัญชีทั้งหมด</span>
-                    <h3>{stats.total.toLocaleString()} คน</h3>
-                    <small>ซิงค์ล่าสุด {lastSync ? formatThaiDate(lastSync) : '—'}</small>
-                </div>
-                <div className="users-directory__hero-metrics">
-                    <div>
-                        <span className="muted">Admin</span>
-                        <strong>{stats.admins}</strong>
-                    </div>
-                    <div>
-                        <span className="muted">Multi-role</span>
-                        <strong>{stats.multiRole}</strong>
-                    </div>
-                    <div>
-                        <span className="muted">ศูนย์ที่ดูแล</span>
-                        <strong>{stats.centers}</strong>
-                    </div>
-                    <div>
-                        <span className="muted">พร้อมเบอร์ติดต่อ</span>
-                        <strong>{stats.contacts}</strong>
-                    </div>
-                </div>
-            </section>
-            {error && !loading && (
-                <section className="users-directory__error-banner">
-                    {error}
-                </section>
-            )}
             <section className="floating-panel users-directory__filters">
                 <div className="users-directory__filters-row">
                     <label>

@@ -352,13 +352,17 @@ export default function UsersAdmin() {
                     </header>
 
                     <label className="form-field">
-                        <span>ชื่อ-นามสกุล *</span>
+                        <span>
+                            ชื่อ-นามสกุล <span className="required-mark">*</span>
+                        </span>
                         <input type="text" value={form.fullName} onChange={updateFormField('fullName')} required />
                         {formErrors.fullName && <small className="error-row">{formErrors.fullName}</small>}
                     </label>
 
                     <label className="form-field">
-                        <span>รหัสพนักงาน (Username) *</span>
+                        <span>
+                            รหัสพนักงาน (Username) <span className="required-mark">*</span>
+                        </span>
                         <input type="text" value={form.username} onChange={updateFormField('username')} placeholder="รหัสพนักงาน" required />
                         {formErrors.username && <small className="error-row">{formErrors.username}</small>}
                     </label>
@@ -370,13 +374,17 @@ export default function UsersAdmin() {
                     </label>
 
                     <div className="form-field">
-                        <span>เบอร์ติดต่อ *</span>
+                        <span>
+                            เบอร์ติดต่อ <span className="required-mark">*</span>
+                        </span>
                         <input type="text" value={form.phone} onChange={updateFormField('phone')} placeholder="08x-xxx-xxxx" required />
                         {formErrors.phone && <small className="error-row">{formErrors.phone}</small>}
                     </div>
 
                     <div className="form-field">
-                        <span>สิทธิ์ในระบบ *</span>
+                        <span>
+                            สิทธิ์ในระบบ <span className="required-mark">*</span>
+                        </span>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginTop: 8 }}>
                             {roleOptions.map((role) => {
                                 const checked = (form.roles || []).includes(role.value);
@@ -410,14 +418,18 @@ export default function UsersAdmin() {
                     </div>
 
                     <label className="form-field">
-                        <span>รหัสผ่าน *</span>
+                        <span>
+                            รหัสผ่าน <span className="required-mark">*</span>
+                        </span>
                         <input type="password" value={form.password} onChange={updateFormField('password')} placeholder="อย่างน้อย 8 ตัวอักษร" required />
                         {formErrors.password && <small className="error-row">{formErrors.password}</small>}
                         <div className="muted" style={{ fontSize: 12 }}>ความแข็งแรง: {passwordStrength.label}</div>
                     </label>
                                 
                     <label className="form-field">
-                        <span>ยืนยันรหัสผ่าน *</span>
+                        <span>
+                            ยืนยันรหัสผ่าน <span className="required-mark">*</span>
+                        </span>
                         <input type="password" value={form.confirmPassword} onChange={updateFormField('confirmPassword')} placeholder="กรอกรหัสผ่านอีกครั้ง" required/>
                         {formErrors.confirmPassword && <small className="error-row">{formErrors.confirmPassword}</small>}
                     </label>

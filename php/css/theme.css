@@ -1554,6 +1554,7 @@ body {
     padding: 0.4rem;
     list-style: none;
     max-height: 230px;
+
     overflow-y: auto;
     z-index: 30;
 }
@@ -3718,4 +3719,10 @@ body {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* Form helpers */
+.required-mark {
+    color: #d93025;
+    font-weight: 600;
 }

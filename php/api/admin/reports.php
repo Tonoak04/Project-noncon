@@ -25,6 +25,10 @@ function admin_reports_base_select(): string
 {
     return 'SELECT r.Report_Id, r.Center_Id, r.Machine_Id, r.Details, r.Admin_Remark, r.Status, r.RPCreated_at, r.Updated_at,
                     c.CenterName,
+                    c.Name,
+                    c.Name AS Reporter_FirstName,
+                    c.LastName,
+                    c.LastName AS Reporter_LastName,
                     m.Equipment AS Machine_Code,
                     m.Description AS Machine_Description,
                     m.Machine_Type AS Machine_Type,

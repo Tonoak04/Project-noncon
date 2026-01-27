@@ -90,6 +90,32 @@ const normalizeStatus = (value) => {
     return lower;
 };
 
+const getReporterDisplayName = (report) => {
+    if (!report) return '';
+    const candidates = [
+        report.Reporter_FirstName ?? report.Name ?? report.first_name ?? report.Name,
+        report.Reporter_LastName ?? report.LastName ?? report.LastName ?? report.LastName ?? report.LastName,
+    ];
+    const names = candidates
+        .map((value) => {
+            if (value === undefined || value === null) {
+                return '';
+            }
+            return String(value).trim();
+        })
+        .filter(Boolean);
+    if (names.length > 0) {
+        return names.join(' ');
+    }
+    if (report.CenterName) {
+        return String(report.CenterName).trim();
+    }
+    if (report.Center_Id) {
+        return `ศูนย์ ${report.Center_Id}`;
+    }
+    return '';
+};
+
 export default function ReportsAdmin() {
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -383,20 +409,6 @@ export default function ReportsAdmin() {
                             ))}
                         </select>
                     </label>
-                    <label>
-                        ศูนย์
-                        <select value={centerFilter} onChange={(event) => setCenterFilter(event.target.value)}>
-                            <option value="all">ทุกศูนย์</option>
-                            {centerOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                    {option.label}
-                                </option>
-                            ))}
-                            {!centerOptions.some((option) => option.value === 'unknown') && (
-                                <option value="unknown">ไม่ระบุศูนย์</option>
-                            )}
-                        </select>
-                    </label>
                 </div>
 
                 <div className="summary-grid admin-report-summary">
@@ -413,7 +425,7 @@ export default function ReportsAdmin() {
                         <span>กำลังดำเนินการ</span>
                     </div>
                     <div className="summary-card">
-                        <strong>{summary.closed}</strong>
+                        <strong>{summary.resolved}</strong>
                         <span>เสร็จสิ้น</span>
                     </div>
                 </div>
@@ -427,6 +439,7 @@ export default function ReportsAdmin() {
                     {filteredReports.map((report) => {
                         const normalizedStatus = normalizeStatus(report.Status);
                         const statusMeta = STATUS_META[normalizedStatus] || { label: report.Status || 'ไม่ทราบ', pill: 'status-pill--default' };
+                        const reporterName = getReporterDisplayName(report);
                         return (
                             <article
                                 key={report.Report_Id}
@@ -448,7 +461,8 @@ export default function ReportsAdmin() {
                                         {report.Machine_Description ? ` · ${report.Machine_Description}` : ''}
                                     </div>
                                     <div>
-                                        <strong>ศูนย์:</strong> {report.CenterName || (report.Center_Id ? `ศูนย์ ${report.Center_Id}` : 'ไม่ระบุ')}
+                                        <strong>ผู้แจ้ง:</strong>{' '}
+                                        {reporterName || 'ไม่ระบุ'}
                                     </div>
                                 </div>
                                 <p className="report-details">{report.Details || 'ไม่มีรายละเอียด'}</p>
@@ -489,9 +503,8 @@ export default function ReportsAdmin() {
                             <div className="report-detail-body">
                                 <header className="detail-header">
                                     <div>
-                                        <div className={`status-pill ${
-                                            (STATUS_META[normalizeStatus(activeReport.Status)] || { pill: 'status-pill--default' }).pill
-                                        }`}>
+                                        <div className={`status-pill ${(STATUS_META[normalizeStatus(activeReport.Status)] || { pill: 'status-pill--default' }).pill
+                                            }`}>
                                             {(STATUS_META[normalizeStatus(activeReport.Status)] || { label: activeReport.Status || 'ไม่ทราบ' }).label}
                                         </div>
                                         <h3>รายงาน #{activeReport.Report_Id}</h3>
@@ -513,8 +526,8 @@ export default function ReportsAdmin() {
                                         )}
                                     </div>
                                     <div>
-                                        <span className="label">ศูนย์</span>
-                                        <strong>{activeReport.CenterName || (activeReport.Center_Id ? `ศูนย์ ${activeReport.Center_Id}` : 'ไม่ระบุ')}</strong>
+                                        <span className="label">ผู้แจ้ง</span>
+                                        <strong>{getReporterDisplayName(activeReport) || 'ไม่ระบุ'}</strong>
                                     </div>
                                     <div>
                                         <span className="label">สถานะ</span>
@@ -598,7 +611,7 @@ export default function ReportsAdmin() {
                                     </form>
                                 </div>
                                 <div className="report-detail-actions">
-                                    { (activeReport.Machine_Code || activeReport.Machine_Id) && (
+                                    {(activeReport.Machine_Code || activeReport.Machine_Id) && (
                                         <button type="button" className="button" onClick={() => handleNavigateMachine(activeReport)}>
                                             เปิดหน้าเครื่องจักร
                                         </button>
