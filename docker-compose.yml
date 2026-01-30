@@ -51,5 +51,31 @@ services:
     ports:
       - "8000:80"
 
+  line-webhook:
+    container_name: project-linebot
+    build:
+      context: ./Line-bot
+      dockerfile: Dockerfile
+    env_file:
+      - ./Line-bot/.env.example
+    environment:
+      TZ: Asia/Bangkok
+    restart: unless-stopped
+    expose:
+      - "8000"
+    ports:
+      - "8100:8000"
+    volumes:
+      - linebot_data:/app/app/data
+
+  cloudflare-tunnel:
+    container_name: project-linebot-tunnel
+    image: cloudflare/cloudflared:2024.11.0
+    depends_on:
+      - line-webhook
+    command: tunnel --no-autoupdate --url http://line-webhook:8000
+    restart: unless-stopped
+
 volumes:
   db_data:
+  linebot_data:
