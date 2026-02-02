@@ -130,6 +130,21 @@ VALUES (
   'EMP003'
 )
 
+INSERT INTO Center (Username, Password, Address, CenterName, Role, Name, Lastname, Phone, Employee_Id)
+VALUES (
+  'Oiler01',
+  '$2y$10$ndnwCCo/TEe5eSUkBbc6ze/DjNACXWI0dpdJ5CxHAg5JZGT1v3Wfa',
+  'HQ',
+  'Main Center',
+  'Oiler',
+  'ชูใจ',
+  'ทองดี',
+  '0123456789',
+  'Oiler01'
+)
+
+'สมปอง'
+
 ON DUPLICATE KEY UPDATE Username=Username;
 
 -- ensure admin role for seeded user

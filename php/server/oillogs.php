@@ -58,7 +58,7 @@ function normalize_text($value, int $maxLen = 2000): ?string
     return $trimmed;
 }
 
-function normalize_date($value): ?string
+function normalize_datetime($value): ?string
 {
     if ($value === null) {
         return null;
@@ -71,7 +71,16 @@ function normalize_date($value): ?string
     if ($ts === false) {
         return null;
     }
-    return date('Y-m-d', $ts);
+    return date('Y-m-d H:i:s', $ts);
+}
+
+function normalize_date($value): ?string
+{
+    $normalized = normalize_datetime($value);
+    if ($normalized === null) {
+        return null;
+    }
+    return substr($normalized, 0, 10);
 }
 
 function normalize_time($value): ?string
@@ -108,6 +117,92 @@ function normalize_decimal($value): ?float
         return null;
     }
     return round((float)$value, 2);
+}
+
+function compose_center_display_name(?string $username, ?string $firstName, ?string $lastName): ?string
+{
+    $full = trim(sprintf('%s %s', (string)$firstName, (string)$lastName));
+    if ($full !== '') {
+        return $full;
+    }
+    $username = trim((string)$username);
+    return $username !== '' ? $username : null;
+}
+
+function resolve_session_display_name(array $user): ?string
+{
+    if (isset($user['displayName'])) {
+        $label = trim((string)$user['displayName']);
+        if ($label !== '') {
+            return $label;
+        }
+    }
+    $parts = [];
+    if (!empty($user['name'])) {
+        $parts[] = trim((string)$user['name']);
+    }
+    if (!empty($user['lastname'])) {
+        $parts[] = trim((string)$user['lastname']);
+    }
+    $full = trim(implode(' ', array_filter($parts)));
+    if ($full !== '') {
+        return $full;
+    }
+    if (!empty($user['Username'])) {
+        return (string)$user['Username'];
+    }
+    return null;
+}
+
+function generate_oillog_approval_token(PDO $pdo): string
+{
+    for ($i = 0; $i < 6; $i++) {
+        $candidate = bin2hex(random_bytes(20));
+        $stmt = $pdo->prepare('SELECT Approval_Id FROM OilLogApproval WHERE Approval_Token = :token LIMIT 1');
+        $stmt->execute([':token' => $candidate]);
+        if ($stmt->fetch() === false) {
+            return $candidate;
+        }
+    }
+    throw new RuntimeException('ไม่สามารถสร้างโทเคนอนุมัติได้');
+}
+
+function ensure_oillog_approval_record(PDO $pdo, int $oilLogId): array
+{
+    $token = generate_oillog_approval_token($pdo);
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+    // TODO(enforce-expiry): Honor Token_Expires_At (~10 minutes) during approval validation.
+    $stmt = $pdo->prepare(
+        'INSERT INTO OilLogApproval (OilLog_Id, Approval_Token, Token_Expires_At)
+        VALUES (:oilLogId, :token, :expires)
+        ON DUPLICATE KEY UPDATE
+            Approval_Token = VALUES(Approval_Token),
+            Token_Expires_At = VALUES(Token_Expires_At),
+            Oiler_User_Id = NULL,
+            Oiler_Approved_At = NULL,
+            Oiler_Remark = NULL,
+            Inspector_User_Id = NULL,
+            Inspector_Approved_At = NULL,
+            Inspector_Remark = NULL,
+            Updated_At = CURRENT_TIMESTAMP'
+    );
+    $stmt->execute([
+        ':oilLogId' => $oilLogId,
+        ':token' => $token,
+        ':expires' => $expiresAt,
+    ]);
+    return [
+        'token' => $token,
+        'expires_at' => $expiresAt,
+    ];
+}
+
+function fetch_center_user_by_id(PDO $pdo, int $centerId): ?array
+{
+    $stmt = $pdo->prepare('SELECT Center_Id, Username, Name, Lastname, `Role` FROM Center WHERE Center_Id = :id LIMIT 1');
+    $stmt->execute([':id' => $centerId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
 }
 
 function time_to_seconds(?string $time): ?int
@@ -261,12 +356,56 @@ function transform_oillog_row(array $row): array
         $row['Photo_Attachments'] = is_array($decoded) ? $decoded : [];
         unset($row['Photo_Attachments_JSON']);
     }
+    if (
+        array_key_exists('Approval_Oiler_Username', $row)
+        || array_key_exists('Approval_Oiler_FirstName', $row)
+        || array_key_exists('Approval_Oiler_LastName', $row)
+    ) {
+        $row['Approval_Oiler_Name'] = compose_center_display_name(
+            $row['Approval_Oiler_Username'] ?? null,
+            $row['Approval_Oiler_FirstName'] ?? null,
+            $row['Approval_Oiler_LastName'] ?? null
+        );
+        unset($row['Approval_Oiler_Username'], $row['Approval_Oiler_FirstName'], $row['Approval_Oiler_LastName']);
+    }
+    if (
+        array_key_exists('Approval_Inspector_Username', $row)
+        || array_key_exists('Approval_Inspector_FirstName', $row)
+        || array_key_exists('Approval_Inspector_LastName', $row)
+    ) {
+        $row['Approval_Inspector_Name'] = compose_center_display_name(
+            $row['Approval_Inspector_Username'] ?? null,
+            $row['Approval_Inspector_FirstName'] ?? null,
+            $row['Approval_Inspector_LastName'] ?? null
+        );
+        unset($row['Approval_Inspector_Username'], $row['Approval_Inspector_FirstName'], $row['Approval_Inspector_LastName']);
+    }
     return $row;
 }
 
 function fetch_oillog(PDO $pdo, int $id): ?array
 {
-    $stmt = $pdo->prepare('SELECT * FROM OilLog WHERE OilLog_Id = :id LIMIT 1');
+    $stmt = $pdo->prepare(
+        'SELECT log.*,
+            apr.Oiler_User_Id AS Approval_Oiler_User_Id,
+            apr.Oiler_Approved_At AS Approval_Oiler_Approved_At,
+            apr.Oiler_Remark AS Approval_Oiler_Remark,
+            apr.Inspector_User_Id AS Approval_Inspector_User_Id,
+            apr.Inspector_Approved_At AS Approval_Inspector_Approved_At,
+            apr.Inspector_Remark AS Approval_Inspector_Remark,
+            oiler.Username AS Approval_Oiler_Username,
+            oiler.Name AS Approval_Oiler_FirstName,
+            oiler.Lastname AS Approval_Oiler_LastName,
+            inspector.Username AS Approval_Inspector_Username,
+            inspector.Name AS Approval_Inspector_FirstName,
+            inspector.Lastname AS Approval_Inspector_LastName
+        FROM OilLog log
+        LEFT JOIN OilLogApproval apr ON apr.OilLog_Id = log.OilLog_Id
+        LEFT JOIN Center oiler ON oiler.Center_Id = apr.Oiler_User_Id
+        LEFT JOIN Center inspector ON inspector.Center_Id = apr.Inspector_User_Id
+        WHERE log.OilLog_Id = :id
+        LIMIT 1'
+    );
     $stmt->execute([':id' => $id]);
     $row = $stmt->fetch();
     if (!$row) {
@@ -277,35 +416,104 @@ function fetch_oillog(PDO $pdo, int $id): ?array
 
 function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
 {
-    $sql = 'SELECT OilLog_Id, Document_No, Document_Date, Shift, Work_Type, Work_Order, Project_Name, Location_Name, Requester_Name, Machine_Code, Machine_Name, Machine_Description, Operation_Details, Fuel_Type, Fuel_Amount_Liters, Fuel_Details_JSON, Photo_Attachments_JSON, Fuel_Ticket_No, Tank_Before_Liters, Tank_After_Liters, Meter_Hour_Start, Meter_Hour_End, Odometer_Start, Odometer_End, Work_Meter_Start, Work_Meter_End, Work_Meter_Total, Time_Morning_Start, Time_Morning_End, Time_Morning_Total, Time_Afternoon_Start, Time_Afternoon_End, Time_Afternoon_Total, Time_Ot_Start, Time_Ot_End, Time_Ot_Total, Fuel_Time, Operator_Name, Assistant_Name, Recorder_Name, Notes, Checklist_JSON, Created_By, Created_At FROM OilLog WHERE 1=1';
+    $sql = 'SELECT
+        log.OilLog_Id,
+        log.Document_No,
+        log.Document_Date,
+        log.Shift,
+        log.Work_Type,
+        log.Work_Order,
+        log.Project_Name,
+        log.Location_Name,
+        log.Requester_Name,
+        log.Machine_Code,
+        log.Machine_Name,
+        log.Machine_Description,
+        log.Operation_Details,
+        log.Fuel_Type,
+        log.Fuel_Amount_Liters,
+        log.Fuel_Details_JSON,
+        log.Photo_Attachments_JSON,
+        log.Fuel_Ticket_No,
+        log.Tank_Before_Liters,
+        log.Tank_After_Liters,
+        log.Meter_Hour_Start,
+        log.Meter_Hour_End,
+        log.Odometer_Start,
+        log.Odometer_End,
+        log.Work_Meter_Start,
+        log.Work_Meter_End,
+        log.Work_Meter_Total,
+        log.Time_Morning_Start,
+        log.Time_Morning_End,
+        log.Time_Morning_Total,
+        log.Time_Afternoon_Start,
+        log.Time_Afternoon_End,
+        log.Time_Afternoon_Total,
+        log.Time_Ot_Start,
+        log.Time_Ot_End,
+        log.Time_Ot_Total,
+        log.Fuel_Time,
+        log.Operator_Name,
+        log.Assistant_Name,
+        log.Recorder_Name,
+        log.Notes,
+        log.Checklist_JSON,
+        log.Created_By,
+        log.Created_At,
+        apr.Oiler_User_Id AS Approval_Oiler_User_Id,
+        apr.Oiler_Approved_At AS Approval_Oiler_Approved_At,
+        apr.Oiler_Remark AS Approval_Oiler_Remark,
+        apr.Inspector_User_Id AS Approval_Inspector_User_Id,
+        apr.Inspector_Approved_At AS Approval_Inspector_Approved_At,
+        apr.Inspector_Remark AS Approval_Inspector_Remark,
+        oiler.Username AS Approval_Oiler_Username,
+        oiler.Name AS Approval_Oiler_FirstName,
+        oiler.Lastname AS Approval_Oiler_LastName,
+        inspector.Username AS Approval_Inspector_Username,
+        inspector.Name AS Approval_Inspector_FirstName,
+        inspector.Lastname AS Approval_Inspector_LastName
+    FROM OilLog log
+    LEFT JOIN OilLogApproval apr ON apr.OilLog_Id = log.OilLog_Id
+    LEFT JOIN Center oiler ON oiler.Center_Id = apr.Oiler_User_Id
+    LEFT JOIN Center inspector ON inspector.Center_Id = apr.Inspector_User_Id
+    WHERE 1=1';
     $params = [];
 
     if (array_key_exists('centerId', $filters) && $filters['centerId'] !== null) {
-        $sql .= ' AND (Center_Id IS NULL OR Center_Id = :centerId)';
+        $sql .= ' AND (log.Center_Id IS NULL OR log.Center_Id = :centerId)';
         $params[':centerId'] = (int)$filters['centerId'];
     }
     if (!empty($filters['from'])) {
-        $sql .= ' AND Document_Date >= :fromDate';
-        $params[':fromDate'] = $filters['from'];
+        $sql .= ' AND log.Document_Date >= :fromDate';
+        $from = $filters['from'];
+        if (strlen($from) === 10) {
+            $from .= ' 00:00:00';
+        }
+        $params[':fromDate'] = $from;
     }
     if (!empty($filters['to'])) {
-        $sql .= ' AND Document_Date <= :toDate';
-        $params[':toDate'] = $filters['to'];
+        $sql .= ' AND log.Document_Date <= :toDate';
+        $to = $filters['to'];
+        if (strlen($to) === 10) {
+            $to .= ' 23:59:59';
+        }
+        $params[':toDate'] = $to;
     }
     if (!empty($filters['date'])) {
-        $sql .= ' AND Document_Date = :exactDate';
+        $sql .= ' AND DATE(log.Document_Date) = :exactDate';
         $params[':exactDate'] = $filters['date'];
     }
     if (!empty($filters['fuelType'])) {
-        $sql .= ' AND Fuel_Type = :fuelType';
+        $sql .= ' AND log.Fuel_Type = :fuelType';
         $params[':fuelType'] = $filters['fuelType'];
     }
     if (!empty($filters['search'])) {
-        $sql .= ' AND (Machine_Code LIKE :search OR Machine_Name LIKE :search OR Project_Name LIKE :search OR Work_Order LIKE :search)';
+        $sql .= ' AND (log.Machine_Code LIKE :search OR log.Machine_Name LIKE :search OR log.Project_Name LIKE :search OR log.Work_Order LIKE :search)';
         $params[':search'] = '%' . $filters['search'] . '%';
     }
 
-    $sql .= ' ORDER BY Document_Date DESC, OilLog_Id DESC';
+    $sql .= ' ORDER BY log.Document_Date DESC, log.OilLog_Id DESC';
     if ($limit !== null) {
         $sql .= ' LIMIT ' . (int)max(1, min($limit, 1000));
     }
@@ -403,7 +611,7 @@ function handle_oillog_post(): void
         return;
     }
 
-    $documentDate = normalize_date($payload['documentDate'] ?? date('Y-m-d'));
+    $documentDate = normalize_datetime($payload['documentDate'] ?? date('Y-m-d H:i:s'));
     $shift = normalize_string($payload['shift'] ?? null, 20);
     $workType = normalize_string($payload['workType'] ?? null, 30);
     $workOrder = normalize_string($payload['workOrder'] ?? null, 100);
@@ -438,6 +646,10 @@ function handle_oillog_post(): void
     $timeOtEnd = normalize_time($payload['timeOtEnd'] ?? null);
     $timeOtTotal = normalize_decimal($payload['timeOtTotal'] ?? null);
     $fuelTime = normalize_time($payload['fuelTime'] ?? null);
+    $operatorAccountId = isset($payload['operatorAccountId']) ? (int)$payload['operatorAccountId'] : null;
+    if ($operatorAccountId !== null && $operatorAccountId <= 0) {
+        $operatorAccountId = null;
+    }
     $operatorName = normalize_string($payload['operatorName'] ?? null, 120);
     $assistantName = normalize_string($payload['assistantName'] ?? null, 120);
     $recorderName = normalize_string($payload['recorderName'] ?? null, 120);
@@ -495,6 +707,31 @@ function handle_oillog_post(): void
         return;
     }
 
+    $sessionOperatorId = isset($user['Center_Id']) ? (int)$user['Center_Id'] : null;
+    $sessionHasOperatorRole = user_has_role($user, 'operator') || user_has_role($user, 'driver');
+    $requiresOperatorLookup = false;
+    if ($sessionHasOperatorRole && $sessionOperatorId !== null) {
+        if ($operatorAccountId !== null && $operatorAccountId !== $sessionOperatorId) {
+            respond_json(['error' => 'ข้อมูลพนักงานขับไม่ตรงกับผู้ที่เข้าสู่ระบบ'], 422);
+            return;
+        }
+        $operatorAccountId = $sessionOperatorId;
+        $sessionOperatorName = resolve_session_display_name($user);
+        if ($sessionOperatorName !== null) {
+            $operatorName = $sessionOperatorName;
+        }
+        if ($operatorName === null || $operatorName === '') {
+            respond_json(['error' => 'ไม่สามารถระบุชื่อพนักงานขับได้'], 422);
+            return;
+        }
+    } else {
+        $requiresOperatorLookup = true;
+        if ($operatorAccountId === null || $operatorAccountId <= 0) {
+            respond_json(['error' => 'กรุณาเลือกพนักงานขับรถ'], 422);
+            return;
+        }
+    }
+
     if ($workMeterTotal === null && $workMeterStart !== null && $workMeterEnd !== null) {
         $workMeterTotal = round($workMeterEnd - $workMeterStart, 2);
     }
@@ -541,6 +778,38 @@ function handle_oillog_post(): void
 
     try {
         $pdo = db_connection();
+        if ($requiresOperatorLookup) {
+            $driverRow = fetch_center_user_by_id($pdo, (int)$operatorAccountId);
+            if (!$driverRow) {
+                respond_json(['error' => 'ไม่พบข้อมูลพนักงานขับรถ'], 422);
+                return;
+            }
+            $driverRoles = resolve_user_roles($driverRow['Role'] ?? null);
+            $driverRoleAllowed = false;
+            foreach (['operator', 'driver'] as $allowedRole) {
+                if (in_array($allowedRole, $driverRoles, true)) {
+                    $driverRoleAllowed = true;
+                    break;
+                }
+            }
+            if (!$driverRoleAllowed) {
+                respond_json(['error' => 'บัญชีที่เลือกไม่ใช่พนักงานขับรถ'], 422);
+                return;
+            }
+            $driverName = trim(sprintf('%s %s', (string)($driverRow['Name'] ?? ''), (string)($driverRow['Lastname'] ?? '')));
+            if ($driverName === '') {
+                $driverName = (string)($driverRow['Username'] ?? '');
+            }
+            if ($driverName === '') {
+                respond_json(['error' => 'ไม่สามารถระบุชื่อพนักงานขับได้'], 422);
+                return;
+            }
+            $operatorName = $driverName;
+        }
+        if ($operatorName === null || $operatorName === '') {
+            respond_json(['error' => 'ไม่สามารถระบุชื่อพนักงานขับได้'], 422);
+            return;
+        }
         $pdo->beginTransaction();
         $stmt = $pdo->prepare('INSERT INTO OilLog (Center_Id, Document_No, Document_Date, Shift, Work_Type, Work_Order, Project_Name, Location_Name, Requester_Name, Supervisor_Name, Machine_Code, Machine_Name, Machine_Description, Operation_Details, Fuel_Type, Fuel_Amount_Liters, Fuel_Details_JSON, Fuel_Ticket_No, Tank_Before_Liters, Tank_After_Liters, Meter_Hour_Start, Meter_Hour_End, Odometer_Start, Odometer_End, Work_Meter_Start, Work_Meter_End, Work_Meter_Total, Time_Morning_Start, Time_Morning_End, Time_Morning_Total, Time_Afternoon_Start, Time_Afternoon_End, Time_Afternoon_Total, Time_Ot_Start, Time_Ot_End, Time_Ot_Total, Fuel_Time, Operator_Name, Assistant_Name, Recorder_Name, Notes, Checklist_JSON, Created_By) VALUES (:center_id, :document_no, :document_date, :shift, :work_type, :work_order, :project_name, :location_name, :requester_name, :supervisor_name, :machine_code, :machine_name, :machine_description, :operation_details, :fuel_type, :fuel_amount, :fuel_details, :fuel_ticket, :tank_before, :tank_after, :meter_start, :meter_end, :km_start, :km_end, :work_meter_start, :work_meter_end, :work_meter_total, :time_morning_start, :time_morning_end, :time_morning_total, :time_afternoon_start, :time_afternoon_end, :time_afternoon_total, :time_ot_start, :time_ot_end, :time_ot_total, :fuel_time, :operator_name, :assistant_name, :recorder_name, :notes, :checklist_json, :created_by)');
         $stmt->execute([
@@ -609,9 +878,19 @@ function handle_oillog_post(): void
             ':id' => $id,
         ]);
 
+        $approvalSeed = ensure_oillog_approval_record($pdo, $id);
+
         $pdo->commit();
         $item = fetch_oillog($pdo, $id);
-        respond_json(['item' => $item], 201);
+        $approvalPayload = [
+            'token' => $approvalSeed['token'],
+            'expires_at' => $approvalSeed['expires_at'],
+            'path' => sprintf('#/oil-approval?oilLogId=%d&token=%s', $id, $approvalSeed['token']),
+        ];
+        respond_json([
+            'item' => $item,
+            'approval' => $approvalPayload,
+        ], 201);
     } catch (Throwable $e) {
         if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
             $pdo->rollBack();

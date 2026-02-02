@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../api.js';
 import { oilChecklistItems, oilTimeSegments, checklistOtherNoteKey, oilChecklistOtherId } from '../../data/oilLog.js';
@@ -117,6 +117,17 @@ export default function OilLogsAdmin() {
     const [latestItems, setLatestItems] = useState([]);
     const [latestLoading, setLatestLoading] = useState(true);
     const [latestError, setLatestError] = useState('');
+    const unauthorizedTimerRef = useRef(null);
+
+    const handleUnauthorized = (message = 'เซสชั่นหมดอายุ กรุณาเข้าสู่ระบบใหม่') => {
+        setError(message);
+        if (unauthorizedTimerRef.current === null) {
+            unauthorizedTimerRef.current = window.setTimeout(() => {
+                unauthorizedTimerRef.current = null;
+                navigate('/login');
+            }, 1500);
+        }
+    };
 
     const buildQueryString = (params) => {
         const searchParams = new URLSearchParams();
@@ -144,7 +155,11 @@ export default function OilLogsAdmin() {
                 return nextMatch || null;
             });
         } catch (err) {
-            setError(err.message || 'ไม่สามารถโหลดข้อมูลได้');
+            if (err?.status === 401) {
+                handleUnauthorized();
+            } else {
+                setError(err.message || 'ไม่สามารถโหลดข้อมูลได้');
+            }
         } finally {
             setLoading(false);
         }
@@ -157,7 +172,11 @@ export default function OilLogsAdmin() {
             const data = await apiGet('/api/oillogs.php?limit=5');
             setLatestItems(data.items || []);
         } catch (err) {
-            setLatestError(err.message || 'โหลดข้อมูลล่าสุดไม่สำเร็จ');
+            if (err?.status === 401) {
+                handleUnauthorized();
+            } else {
+                setLatestError(err.message || 'โหลดข้อมูลล่าสุดไม่สำเร็จ');
+            }
         } finally {
             setLatestLoading(false);
         }
@@ -169,6 +188,12 @@ export default function OilLogsAdmin() {
 
     useEffect(() => {
         fetchLatest();
+        return () => {
+            if (unauthorizedTimerRef.current !== null) {
+                window.clearTimeout(unauthorizedTimerRef.current);
+                unauthorizedTimerRef.current = null;
+            }
+        };
     }, []);
 
     const applyFilters = (event) => {
@@ -346,10 +371,12 @@ export default function OilLogsAdmin() {
         if (!selected) {
             return [];
         }
+        const inspectorName = selected.Approval_Inspector_Name || selected.Assistant_Name || '';
+        const oilerName = selected.Approval_Oiler_Name || selected.Recorder_Name || selected.Requester_Name || '';
         return [
             { label: 'พนักงานขับรถ', value: selected.Operator_Name || 'ไม่ระบุ' },
-            { label: 'ผู้ตรวจสอบ', value: selected.Assistant_Name || 'ไม่ระบุ' },
-            { label: 'พนักงานออยเลอร์', value: selected.Recorder_Name || selected.Requester_Name || 'ไม่ระบุ' },
+            { label: 'ผู้ตรวจสอบ', value: inspectorName || 'ไม่ระบุ' },
+            { label: 'พนักงานออยเลอร์', value: oilerName || 'ไม่ระบุ' },
         ];
     }, [selected]);
 

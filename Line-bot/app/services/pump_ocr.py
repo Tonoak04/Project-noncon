@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple, Set
 
 import cv2
 import numpy as np
@@ -29,6 +29,8 @@ class OcrTextLine:
     text: str
     confidence: float
     row_index: Optional[int] = None
+    center_y: Optional[float] = None
+    is_display: bool = False
 
 
 class PumpOcrService:
@@ -42,7 +44,7 @@ class PumpOcrService:
 
     def analyze(self, image_bytes: bytes) -> PumpReading:
         image_array = self._to_numpy(image_bytes)
-        text_lines = self._run_ocr(image_array)
+        text_lines, signatures = self._run_multi_pass_ocr(image_array)
         confidences = [line.confidence for line in text_lines]
 
         if image_array.size > 0:
@@ -52,19 +54,24 @@ class PumpOcrService:
                     continue
                 for line in region_lines:
                     line.row_index = idx
-                text_lines.extend(region_lines)
-                confidences.extend([line.confidence for line in region_lines])
+                    line.is_display = True
+                added = self._merge_unique_lines(text_lines, region_lines, signatures)
+                confidences.extend(line.confidence for line in added)
 
-        liters, amount, price_per_liter, computed = self._infer_values(text_lines)
+        analysis_lines = self._prioritize_display_lines(text_lines)
+        liters, amount, price_per_liter, computed = self._infer_values(analysis_lines)
 
         if (liters is None or amount is None) and image_array.size > 0:
             for region in self._generate_focus_regions(image_array):
                 region_lines = self._run_ocr(region)
                 if not region_lines:
                     continue
-                text_lines.extend(region_lines)
-                confidences.extend([line.confidence for line in region_lines])
-                liters, amount, price_per_liter, computed = self._infer_values(text_lines)
+                added = self._merge_unique_lines(text_lines, region_lines, signatures)
+                if not added:
+                    continue
+                confidences.extend(line.confidence for line in added)
+                analysis_lines = self._prioritize_display_lines(text_lines)
+                liters, amount, price_per_liter, computed = self._infer_values(analysis_lines)
                 if liters is not None and amount is not None:
                     break
 
@@ -92,15 +99,146 @@ class PumpOcrService:
             return []
         ocr_results, _ = self.reader(image)
         lines: List[OcrTextLine] = []
-        for line in ocr_results or []:
-            if len(line) < 3:
+        height = image.shape[0]
+        for raw in ocr_results or []:
+            if len(raw) < 3:
                 continue
             try:
-                conf = float(line[2])
+                conf = float(raw[2])
             except (TypeError, ValueError):
                 conf = 0.0
-            lines.append(OcrTextLine(text=line[1], confidence=conf))
+            text = str(raw[1])
+            center_y = self._box_center_y(raw[0])
+            lines.append(OcrTextLine(text=text, confidence=conf, center_y=center_y))
+        self._assign_row_indices(lines, height)
         return lines
+
+    def _run_multi_pass_ocr(self, image: np.ndarray) -> Tuple[List[OcrTextLine], Set[Tuple[str, int]]]:
+        lines: List[OcrTextLine] = []
+        signatures: Set[Tuple[str, int]] = set()
+        if image.size == 0:
+            return lines, signatures
+
+        for variant in self._generate_variants(image):
+            variant_lines = self._run_ocr(variant)
+            self._merge_unique_lines(lines, variant_lines, signatures)
+
+        return lines, signatures
+
+    def _generate_variants(self, image: np.ndarray) -> List[np.ndarray]:
+        if image.size == 0:
+            return []
+
+        variants: List[np.ndarray] = [image]
+        resized = self._resize_if_needed(image)
+        if resized is not None:
+            variants.append(resized)
+        variants.append(self._enhance_contrast(image))
+        variants.append(self._sharpen_image(image))
+
+        unique: List[np.ndarray] = []
+        seen: Set[Tuple[int, int, int]] = set()
+        for variant in variants:
+            if variant is None or variant.size == 0:
+                continue
+            key = (variant.shape[0], variant.shape[1], int(variant.mean()))
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(variant)
+        return unique
+
+    @staticmethod
+    def _resize_if_needed(image: np.ndarray) -> Optional[np.ndarray]:
+        height, width = image.shape[:2]
+        if width <= 0 or width >= 1200:
+            return None
+        scale = 1200.0 / float(width)
+        if scale <= 1.05:
+            return None
+        new_size = (int(width * scale), int(height * scale))
+        resized = cv2.resize(image, new_size, interpolation=cv2.INTER_CUBIC)
+        return np.clip(resized, 0, 255).astype(np.uint8)
+
+    @staticmethod
+    def _enhance_contrast(image: np.ndarray) -> np.ndarray:
+        lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+        l_channel, a_channel, b_channel = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        cl = clahe.apply(l_channel)
+        merged = cv2.merge((cl, a_channel, b_channel))
+        enhanced = cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
+        return enhanced
+
+    @staticmethod
+    def _sharpen_image(image: np.ndarray) -> np.ndarray:
+        blurred = cv2.GaussianBlur(image, (0, 0), 1.2)
+        sharpened = cv2.addWeighted(image, 1.4, blurred, -0.4, 0)
+        return np.clip(sharpened, 0, 255).astype(np.uint8)
+
+    @staticmethod
+    def _box_center_y(box) -> Optional[float]:
+        if box is None:
+            return None
+        try:
+            ys = [point[1] for point in box if len(point) >= 2]
+        except (TypeError, ValueError):
+            return None
+        if not ys:
+            return None
+        return float(sum(ys) / len(ys))
+
+    def _assign_row_indices(self, lines: List[OcrTextLine], image_height: int) -> None:
+        valid_lines = [line for line in lines if line.center_y is not None]
+        if not valid_lines or image_height <= 0:
+            return
+
+        valid_lines.sort(key=lambda item: item.center_y)
+        threshold = max(12.0, image_height * 0.08)
+        current_row = -1
+        last_center = None
+        for line in valid_lines:
+            if last_center is None or abs(line.center_y - last_center) > threshold:
+                current_row += 1
+                last_center = line.center_y
+            line.row_index = current_row
+
+    @staticmethod
+    def _line_signature(line: OcrTextLine) -> Tuple[str, int]:
+        normalized_text = line.text.strip().lower()
+        row_value = line.row_index if line.row_index is not None else -1
+        return normalized_text, row_value
+
+    def _merge_unique_lines(
+        self,
+        target: List[OcrTextLine],
+        new_lines: Sequence[OcrTextLine],
+        signatures: Set[Tuple[str, int]],
+    ) -> List[OcrTextLine]:
+        added: List[OcrTextLine] = []
+        for line in new_lines:
+            signature = self._line_signature(line)
+            if signature in signatures:
+                continue
+            signatures.add(signature)
+            target.append(line)
+            added.append(line)
+        return added
+
+    def _prioritize_display_lines(self, lines: Sequence[OcrTextLine]) -> List[OcrTextLine]:
+        display_lines = [line for line in lines if line.is_display]
+        if display_lines and self._has_minimum_numeric_content(display_lines):
+            return display_lines
+        return list(lines)
+
+    def _has_minimum_numeric_content(self, lines: Sequence[OcrTextLine], threshold: int = 2) -> bool:
+        count = 0
+        for line in lines:
+            text = line.text.replace(" ", "")
+            count += len(self.number_pattern.findall(text))
+            if count >= threshold:
+                return True
+        return False
 
     def _detect_display_rows(self, image: np.ndarray) -> List[np.ndarray]:
         if image.size == 0:
@@ -196,21 +334,28 @@ class PumpOcrService:
             return triple_match["liters"], triple_match["amount"], triple_match["price"], True
 
         amount_candidate = self._pick_amount(candidates)
-        liters_candidate = self._pick_liters(candidates, amount_candidate)
-        price_candidate = self._pick_price(candidates)
-
-        liters = liters_candidate["value"] if liters_candidate else None
         amount = amount_candidate["value"] if amount_candidate else None
+
+        liters_candidate = self._pick_liters(candidates, amount_candidate)
+        liters = liters_candidate["value"] if liters_candidate else None
+
+        price_candidate = self._pick_price(candidates)
         price = price_candidate["value"] if price_candidate else None
 
         direct_signals = sum(1 for cand in (amount_candidate, liters_candidate, price_candidate) if cand)
 
         liters, amount, price, computed = self._fill_missing(liters, amount, price)
 
-        if direct_signals < 2:
+        if amount is None or liters is None:
             return None, None, None, False
 
-        if liters and amount and price and not self._is_consistent(liters, amount, price):
+        if not amount_candidate and not liters_candidate:
+            return None, None, None, False
+
+        if direct_signals < 2 and not computed:
+            return None, None, None, False
+
+        if price and not self._is_consistent(liters, amount, price):
             return None, None, None, False
 
         return liters, amount, price, computed
@@ -423,26 +568,40 @@ class PumpOcrService:
         price: Optional[float],
     ) -> tuple:
         computed = False
-        if liters and amount and not price and liters > 0:
-            price = round(amount / liters, 2)
-            computed = True
 
-        if price and liters and not amount:
+        if amount is None and liters is not None and price and price > 0:
             amount = round(liters * price, 2)
             computed = True
-        elif price and amount and not liters and price > 0:
+
+        if amount is None and liters is not None and (price is None or price <= 0):
+            price = round(self.default_price, 2)
+            amount = round(liters * price, 2)
+            computed = True
+
+        if amount is None and price and price > 0 and liters is None:
+            return None, None, None, False
+
+        if amount is None:
+            return None, None, None, False
+
+        if liters is None and price and price > 0:
             liters = round(amount / price, 2)
+            computed = True
+
+        if liters is None and price is None:
+            price = round(self.default_price, 2)
+            liters = round(amount / price, 2)
+            computed = True
+
+        if liters is None:
+            return None, None, None, False
+
+        if price is None and liters > 0:
+            price = round(amount / liters, 2)
             computed = True
 
         if price is None:
             price = round(self.default_price, 2)
-            computed = True
-
-        if liters is None and amount is not None and price:
-            liters = round(amount / price, 2)
-            computed = True
-        elif amount is None and liters is not None and price:
-            amount = round(liters * price, 2)
             computed = True
 
         return liters, amount, price, computed

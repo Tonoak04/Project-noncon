@@ -7,6 +7,7 @@ import Categories from './pages/Categories.jsx';
 import Classes from './pages/Classes.jsx';
 import Scanner from './pages/Scanner.jsx';
 import OilLog from './pages/OilLog.jsx';
+import OilApproval from './pages/OilApproval.jsx';
 import Reports from './pages/Reports.jsx';
 import Checklist from './pages/Checklist.jsx';
 import Login from './pages/Login.jsx';
@@ -42,7 +43,7 @@ function ProtectedRoute({ children }) {
 function AppShell() {
     const location = useLocation();
     const isHome = location.pathname === '/';
-    const fullWidthPaths = ['/worksite', '/categories', '/scanner', '/reports', '/login', '/checklist'];
+    const fullWidthPaths = ['/worksite', '/categories', '/scanner', '/reports', '/login', '/checklist', '/oil-approval'];
     const edgePaths = ['/login'];
     const isFullWidth = fullWidthPaths.includes(location.pathname);
     const isEdge = edgePaths.includes(location.pathname);
@@ -179,6 +180,14 @@ function AppShell() {
                         element={
                             <ProtectedRoute>
                                 <OilLog />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/oil-approval"
+                        element={
+                            <ProtectedRoute>
+                                <OilApproval />
                             </ProtectedRoute>
                         }
                     />

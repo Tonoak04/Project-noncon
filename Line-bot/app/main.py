@@ -131,12 +131,12 @@ def handle_image(event: MessageEvent):
 
         user_id = _resolve_user_id(event)
         pending = _store_pending_reading(user_id, reading)
-        confirmation_template = _build_confirmation_template(pending)
+        confirmation_messages = _build_confirmation_messages(pending)
 
         line_bot_api.reply_message(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[confirmation_template],
+                messages=confirmation_messages,
             )
         )
 
@@ -158,7 +158,7 @@ def _build_summary_text(entry: OilLogEntry, computed: bool) -> str:
     timestamp = _format_timestamp(entry.created_at)
     lines = [
         f"บันทึกสำเร็จ {timestamp}",
-        f"ปริมาณ: {entry.liters:.2f} ลิตร",
+        f"จำนวน: {entry.liters:.2f} ลิตร",
         f"ราคาต่อ ลิตร: {entry.price_per_liter:.2f} บาท",
         f"ยอดเงิน: {entry.amount:.2f} บาท",
     ]
@@ -167,27 +167,48 @@ def _build_summary_text(entry: OilLogEntry, computed: bool) -> str:
     return "\n".join(lines)
 
 
-def _build_confirmation_template(pending: dict) -> TemplateMessage:
-    summary = (
-        f"{pending['liters']:.2f}ลิตร @ {pending['price_per_liter']:.2f}บาท/ลิตร = "
-        f"{pending['amount']:.2f}บาท"
-    )
+def _build_confirmation_messages(pending: dict) -> list:
+    price_value = pending.get("price_per_liter")
+    if price_value in (None, 0):
+        price_line = "3) ราคาต่อลิตร ไม่พบในภาพ ใช้ค่าระบบ"
+        template_price = "ราคาลิตร ไม่มี"
+    else:
+        price_line = f"3) ราคาต่อลิตร {price_value:.2f} บาท"
+        template_price = f"ราคาลิตร {price_value:.2f}฿"
+
+    details = [
+        f"1) ยอดขาย {pending['amount']:.2f} บาท",
+        f"2) ปริมาณ {pending['liters']:.2f} ลิตร",
+        price_line,
+    ]
     if pending.get("computed"):
-        summary += " (คำนวณ)"
+        details.append("ℹ️ มีการคำนวณอัตโนมัติ")
+
+    summary_text = "\n".join(details)
+
+    template_lines = [
+        f"ยอดขาย {pending['amount']:.2f}฿",
+        f"ปริมาณ {pending['liters']:.2f}L",
+        template_price,
+    ]
+    template_text = _truncate_text("\n".join(template_lines), 60)
 
     template = ButtonsTemplate(
         title="ยืนยันข้อมูล",
-        text=_truncate_text(summary, 60),
+        text=template_text,
         actions=[
             MessageAction(label="ยืนยัน", text="ยืนยัน"),
             MessageAction(label="ยกเลิก", text="ยกเลิก"),
         ],
     )
 
-    return TemplateMessage(
-        alt_text="กรุณายืนยันข้อมูลน้ำมัน",
-        template=template,
-    )
+    return [
+        TextMessage(text=_truncate_text(summary_text, 500)),
+        TemplateMessage(
+            alt_text="กรุณายืนยันข้อมูลน้ำมัน",
+            template=template,
+        ),
+    ]
 
 
 def _truncate_text(text: str, limit: int) -> str:
