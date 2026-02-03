@@ -203,29 +203,36 @@ export default function OilLogsAdmin() {
 
     const exportCsv = () => {
         if (!items.length) return;
-        const headers = ['Document Date', 'Document No', 'Machine', 'Project', 'Fuel Type', 'Liters', 'Work Type', 'Operator', 'Ticket', 'Created', 'Fuel Meter Start', 'Fuel Meter End', 'Fuel Meter Total', 'Morning Hours', 'Afternoon Hours', 'OT Hours'];
-        const rows = items.map((row) => [
-            row.Document_Date || '',
-            row.Document_No || row.OilLog_Id,
-            row.Machine_Code || '',
-            row.Project_Name || '',
-            row.Fuel_Type || '',
-            row.Fuel_Amount_Liters || '',
-            row.Work_Type || '',
-            row.Operator_Name || row.Requester_Name || '',
-            row.Fuel_Ticket_No || '',
-            row.Created_At || '',
-            row.Work_Meter_Start || '',
-            row.Work_Meter_End || '',
-            row.Work_Meter_Total || '',
-            row.Time_Morning_Total || '',
-            row.Time_Afternoon_Total || '',
-            row.Time_Ot_Total || '',
-        ]);
+        const headers = ['Document Date', 'Document No', 'Machine', 'Project', 'Fuel Type', 'Liters', 'Work Type', 'Operator', 'Assistant', 'Recorder', 'Ticket', 'Created', 'Fuel Meter Start', 'Fuel Meter End', 'Fuel Meter Total', 'Morning Hours', 'Afternoon Hours', 'OT Hours'];
+        const rows = items.map((row) => {
+            const assistantDisplay = row.Assistant_Name || row.Approval_Inspector_Name || row.Requester_Name || '';
+            const recorderDisplay = row.Recorder_Name || row.Approval_Oiler_Name || '';
+            return [
+                row.Document_Date || '',
+                row.Document_No || row.OilLog_Id,
+                row.Machine_Code || '',
+                row.Project_Name || '',
+                row.Fuel_Type || '',
+                row.Fuel_Amount_Liters || '',
+                row.Work_Type || '',
+                row.Operator_Name || row.Requester_Name || '',
+                assistantDisplay,
+                recorderDisplay,
+                row.Fuel_Ticket_No || '',
+                row.Created_At || '',
+                row.Work_Meter_Start || '',
+                row.Work_Meter_End || '',
+                row.Work_Meter_Total || '',
+                row.Time_Morning_Total || '',
+                row.Time_Afternoon_Total || '',
+                row.Time_Ot_Total || '',
+            ];
+        });
         const csv = [headers, ...rows]
             .map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(','))
             .join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const bom = '\uFEFF';
+        const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -404,7 +411,7 @@ export default function OilLogsAdmin() {
                     </label>
                     <label>
                         คำค้นหา
-                        <input type="text" value={filters.search} onChange={handleFilterChange('search')} placeholder="เครื่อง, โครงการ, ใบจ่าย" />
+                        <input type="text" value={filters.search} onChange={handleFilterChange('search')} placeholder="เครื่อง, โครงการ, ใบจ่าย, ผู้ปฏิบัติงาน" />
                     </label>
                     <label>
                         จำนวนที่แสดง

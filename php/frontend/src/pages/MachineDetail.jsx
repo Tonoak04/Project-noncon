@@ -44,6 +44,8 @@ const toUploadsPath = (url) => {
     }
 };
 
+const MAX_MACHINE_IMAGES = 5;
+
 const normalizeMachine = (input) => {
     if (!input) return input;
     const normalized = { ...input };
@@ -66,8 +68,9 @@ const normalizeMachine = (input) => {
                     url: absolute,
                     path: toUploadsPath(raw) || raw,
                 };
-            })
-            .filter((img) => Boolean(img && img.url));
+                })
+                .filter((img) => Boolean(img && img.url))
+                .slice(0, MAX_MACHINE_IMAGES);
     }
 
     return normalized;
@@ -284,17 +287,36 @@ export default function MachineDetail() {
     const fileInputRef = useRef(null);
 
     const handleChooseFiles = () => {
+        if ((machine?.images?.length || 0) >= MAX_MACHINE_IMAGES) {
+            alert(`อัปโหลดได้สูงสุด ${MAX_MACHINE_IMAGES} รูปต่อเครื่อง`);
+            return;
+        }
         if (fileInputRef.current) fileInputRef.current.click();
     };
 
     const handleFilesSelected = async (e) => {
         const files = (e.target && e.target.files) ? e.target.files : null;
         if (!files || files.length === 0 || !machine) return;
+        const currentCount = machine.images?.length || 0;
+        const remainingSlots = Math.max(0, MAX_MACHINE_IMAGES - currentCount);
+        if (remainingSlots <= 0) {
+            alert(`มีรูปครบ ${MAX_MACHINE_IMAGES} รูปแล้ว`);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+        const allowedFiles = Array.from(files).slice(0, remainingSlots);
+        if (allowedFiles.length === 0) {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+        if (allowedFiles.length < files.length) {
+            alert(`เลือกรูปได้อีกไม่เกิน ${remainingSlots} รูป`);
+        }
         setUploading(true);
         try {
             const fd = new FormData();
             fd.append('Machine_Id', String(machine.Machine_Id));
-            for (let i = 0; i < files.length; i++) fd.append('files[]', files[i]);
+            for (let i = 0; i < allowedFiles.length; i++) fd.append('files[]', allowedFiles[i]);
             const res = await fetch('/api/admin/machines_images.php', {
                 method: 'POST',
                 credentials: 'include',
@@ -319,7 +341,7 @@ export default function MachineDetail() {
                 .filter(Boolean);
             setMachine((m) => {
                 if (!m) return m;
-                return { ...m, images: [...(m.images || []), ...appended] };
+                return { ...m, images: [...(m.images || []), ...appended].slice(0, MAX_MACHINE_IMAGES) };
             });
         } catch (e) {
             alert(e.message || 'Upload failed');

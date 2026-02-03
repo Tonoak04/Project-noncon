@@ -207,7 +207,9 @@ export default function MachinesAdmin() {
     };
 
     const normalizeExcelRows = (rows) => {
-        return rows.map((row) => {
+        const updates = [];
+        const inserts = [];
+        rows.forEach((row) => {
             const normalized = {};
             Object.entries(row).forEach(([key, value]) => {
                 const mapped = mapExcelKey(key);
@@ -227,8 +229,14 @@ export default function MachinesAdmin() {
                     ? String(value)
                     : String(value).trim();
             });
-            return normalized;
-        }).filter((row) => typeof row.Machine_Id === 'number' && row.Machine_Id > 0);
+            if (typeof normalized.Machine_Id === 'number' && normalized.Machine_Id > 0) {
+                updates.push(normalized);
+            } else if (normalized.Equipment && String(normalized.Equipment).trim() !== '') {
+                normalized.Equipment = String(normalized.Equipment).trim();
+                inserts.push(normalized);
+            }
+        });
+        return { updates, inserts };
     };
 
     const handleExcelButton = () => {
@@ -249,11 +257,14 @@ export default function MachinesAdmin() {
             }
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-            const updates = normalizeExcelRows(rows);
-            if (!updates.length) {
-                throw new Error('ต้องมีคอลัมน์ Machine_Id อย่างน้อยหนึ่งแถว');
+            const { updates, inserts } = normalizeExcelRows(rows);
+            if (!updates.length && !inserts.length) {
+                throw new Error('ไฟล์ต้องมี Machine_Id สำหรับการแก้ไข หรือ Equipment สำหรับเพิ่มใหม่อย่างน้อยหนึ่งรายการ');
             }
-            const result = await apiPost('/api/admin/machines.php?action=bulk-update', { items: updates });
+            const payload = {};
+            if (updates.length) payload.items = updates;
+            if (inserts.length) payload.newItems = inserts;
+            const result = await apiPost('/api/admin/machines.php?action=bulk-update', payload);
             setItems((prev) => {
                 const next = new Map(prev.map((item) => [item.Machine_Id, item]));
                 (result.items || []).forEach((updated) => {
@@ -263,7 +274,12 @@ export default function MachinesAdmin() {
                 });
                 return Array.from(next.values());
             });
-            setBulkStatus(`อัปเดตสำเร็จ ${result.updated || 0} รายการ`);
+            const updatedCnt = result.updated || 0;
+            const insertedCnt = result.inserted || 0;
+            const msgParts = [];
+            if (updatedCnt) msgParts.push(`อัปเดต ${updatedCnt} รายการ`);
+            if (insertedCnt) msgParts.push(`เพิ่มใหม่ ${insertedCnt} รายการ`);
+            setBulkStatus(msgParts.length ? `สำเร็จ: ${msgParts.join(', ')}` : 'ไม่มีแถวใดถูกเปลี่ยนแปลง');
         } catch (err) {
             setBulkStatus(err.message || 'เกิดข้อผิดพลาดในการอัปโหลด');
         } finally {
@@ -380,12 +396,12 @@ export default function MachinesAdmin() {
                     {isAdminView && (
                         <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
                             <button className="button primary" type="button" onClick={handleExcelButton} disabled={bulkUploading}>
-                                {bulkUploading ? 'กำลังอัปโหลด…' : 'อัปโหลด Excel'}
+                                {bulkUploading ? 'กำลังอัปโหลด…' : 'อัปโหลดไฟล์ Excel/CSV'}
                             </button>
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".xlsx,.xls"
+                                accept=".xlsx,.xls,.csv"
                                 style={{display:'none'}}
                                 onChange={handleExcelFile}
                             />

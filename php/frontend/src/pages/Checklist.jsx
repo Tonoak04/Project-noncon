@@ -245,8 +245,11 @@ export default function Checklist() {
     const hasRole = (value) => normalizedRoles.includes(value);
     const isForeman = hasRole('foreman');
     const isAdmin = hasRole('admin');
-    const isDriver = hasRole('driver') || (!isForeman && !isAdmin);
-    const isReadOnlyViewer = isAdmin && !isForeman;
+    const isDriver = hasRole('driver');
+    const isOperator = hasRole('operator');
+    const isReadOnlyViewer = isAdmin && !isForeman && !isOperator;
+    const isOnlyView = isOperator && !isForeman && !isAdmin;
+    const canAccessChecklist = isForeman || isAdmin || isDriver || isOperator;
 
     const [metaForm, setMetaForm] = useState(() => defaultMetaForm());
     const [machines, setMachines] = useState([]);
@@ -570,7 +573,7 @@ export default function Checklist() {
         if (item.signatureRole === 'driver') {
             const driverValue = driverSignatures[dayKey] ?? '';
             const driverLocked = driverLockedDays.has(day);
-            if (driverLocked || isForeman || isReadOnlyViewer) {
+            if (driverLocked || isForeman || isReadOnlyViewer || isOnlyView) {
                 const displayValue = resolveSignatureDisplay(driverValue, driverOptions);
                 return (
                     <input
@@ -586,7 +589,7 @@ export default function Checklist() {
                 <select
                     className="signature-grid-input"
                     value={driverValue}
-                    disabled={!isMetaComplete || checklistLoading || driverOptions.length === 0 || isReadOnlyViewer}
+                    disabled={!isMetaComplete || checklistLoading || driverOptions.length === 0 || isReadOnlyViewer || isOnlyView}
                     onChange={(event) => {
                         const nextValue = event.target.value;
                         setDriverSignatures((prev) => ({ ...prev, [dayKey]: nextValue }));
@@ -797,6 +800,40 @@ export default function Checklist() {
                 || status === 'saving'
                 || checklistLoading);
 
+    // Operators in OnlyView mode cannot save
+    if (isOnlyView) {
+        // always disable save for only-view operators
+        // keep existing disabled state for buttons
+        // override to true
+        // This ensures Save button is non-interactive for operator-only view.
+        // eslint-disable-next-line no-unused-vars
+        const _forceDisable = true;
+    }
+
+    if (!canAccessChecklist) {
+        return (
+            <div className="portal">
+                <section>
+                    <div className="error-row" style={{ marginBottom: '1rem' }}>
+                        <strong>ไม่มีสิทธิ์เข้าถึงแบบฟอร์มนี้</strong>
+                        <p style={{ marginTop: 4 }}>คุณไม่มีสิทธิ์บันทึกแบบฟอร์มนี้</p>
+                    </div>
+                    <button type="button" className="button" onClick={() => navigate('/worksite')}>
+                        กลับหน้าหลัก
+                    </button>
+                </section>
+            </div>
+        );
+    }
+
+    // If operator-only view, show a small info banner
+    const onlyViewBanner = isOnlyView ? (
+        <div style={{ margin: '0.5rem 0', padding: '0.5rem 0.75rem', background: '#f6f8fa', borderRadius: 6 }}>
+            <strong>เฉพาะการดู</strong>
+            <div style={{ fontSize: 13 }}>คุณมีสิทธิ์ดูแบบฟอร์มนี้ในโหมดอ่านอย่างเดียว (ไม่สามารถแก้ไขหรือบันทึกได้)</div>
+        </div>
+    ) : null;
+
     return (
         <div className="checklist-page">
             <style>{CHECKLIST_TABLE_STYLES}</style>
@@ -968,7 +1005,7 @@ export default function Checklist() {
                                                 className="status-select"
                                                 value={checklistValues[String(day)]?.[item.order] ?? ''}
                                                 aria-label={`เลือกสถานะ ข้อ ${item.order} วันที่ ${day}`}
-                                                disabled={!isMetaComplete || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isReadOnlyViewer}
+                                                disabled={!isMetaComplete || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isReadOnlyViewer || isOnlyView}
                                                 onChange={(event) => handleStatusChange(day, item.order, event.target.value)}
                                             >
                                                 {STATUS_OPTIONS.map((option) => (
@@ -1021,7 +1058,7 @@ export default function Checklist() {
                 >
                     ย้อนกลับ
                 </button>
-                <button type="button" className="button primary" disabled={isSaveDisabled} onClick={handleSave}>
+                <button type="button" className="button primary" disabled={isSaveDisabled || isOnlyView} onClick={handleSave}>
                     {isForeman ? 'บันทึกลายเซ็นโฟร์แมน' : 'บันทึกข้อมูลพขร.'}
                 </button>
                 {status === 'saving' && <span className="text-muted">กำลังบันทึก...</span>}

@@ -509,7 +509,15 @@ function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
         $params[':fuelType'] = $filters['fuelType'];
     }
     if (!empty($filters['search'])) {
-        $sql .= ' AND (log.Machine_Code LIKE :search OR log.Machine_Name LIKE :search OR log.Project_Name LIKE :search OR log.Work_Order LIKE :search)';
+        $sql .= ' AND (
+            log.Machine_Code LIKE :search
+            OR log.Machine_Name LIKE :search
+            OR log.Project_Name LIKE :search
+            OR log.Work_Order LIKE :search
+            OR log.Operator_Name LIKE :search
+            OR log.Requester_Name LIKE :search
+            OR log.Assistant_Name LIKE :search
+        )';
         $params[':search'] = '%' . $filters['search'] . '%';
     }
 

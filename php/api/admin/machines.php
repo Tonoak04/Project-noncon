@@ -37,7 +37,9 @@ try {
 
     if ($method === 'POST' && isset($_GET['action']) && $_GET['action'] === 'bulk-update') {
         $user = require_role(['admin']);
-        if (!isset($input['items']) || !is_array($input['items'])) {
+        $hasUpdates = isset($input['items']) && is_array($input['items']);
+        $hasInserts = isset($input['newItems']) && is_array($input['newItems']);
+        if (!$hasUpdates && !$hasInserts) {
             json_response(['error' => 'Missing items'], 400);
             exit;
         }
@@ -45,36 +47,79 @@ try {
         $allowed = ['Equipment','Machine_Type','Company_code','Recipient','Description','Status','License_plate_Number','Class','Assest_Number','Keyword','Note'];
         $updatedRows = [];
         $updatedCount = 0;
+        $insertedRows = [];
+        $insertedCount = 0;
         $pdo->beginTransaction();
         try {
             $selectStmt = $pdo->prepare('SELECT * FROM Machines WHERE Machine_Id = ? LIMIT 1');
-            foreach ($input['items'] as $row) {
-                if (!is_array($row)) {
-                    continue;
-                }
-                $id = isset($row['Machine_Id']) ? (int)$row['Machine_Id'] : 0;
-                if ($id <= 0) {
-                    continue;
-                }
-                $set = [];
-                $params = ['Machine_Id' => $id];
-                foreach ($allowed as $field) {
-                    if (array_key_exists($field, $row)) {
-                        $set[] = "`$field` = :$field";
-                        $params[$field] = $row[$field];
+            if ($hasUpdates) {
+                foreach ($input['items'] as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $id = isset($row['Machine_Id']) ? (int)$row['Machine_Id'] : 0;
+                    if ($id <= 0) {
+                        continue;
+                    }
+                    $set = [];
+                    $params = ['Machine_Id' => $id];
+                    foreach ($allowed as $field) {
+                        if (array_key_exists($field, $row)) {
+                            $set[] = "`$field` = :$field";
+                            $params[$field] = $row[$field];
+                        }
+                    }
+                    if (empty($set)) {
+                        continue;
+                    }
+                    $sql = 'UPDATE Machines SET ' . implode(', ', $set) . ' WHERE Machine_Id = :Machine_Id';
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute($params);
+                    $selectStmt->execute([$id]);
+                    $updated = $selectStmt->fetch();
+                    if ($updated) {
+                        $updatedRows[] = $updated;
+                        $updatedCount++;
                     }
                 }
-                if (empty($set)) {
-                    continue;
-                }
-                $sql = 'UPDATE Machines SET ' . implode(', ', $set) . ' WHERE Machine_Id = :Machine_Id';
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute($params);
-                $selectStmt->execute([$id]);
-                $updated = $selectStmt->fetch();
-                if ($updated) {
-                    $updatedRows[] = $updated;
-                    $updatedCount++;
+            }
+
+            if ($hasInserts) {
+                $fieldList = array_unique(array_merge(['Equipment'], $allowed));
+                $insertStmt = $pdo->prepare(
+                    'INSERT INTO Machines (' . implode(', ', $fieldList) . ')
+                    VALUES (:' . implode(', :', $fieldList) . ')'
+                );
+                foreach ($input['newItems'] as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $equipment = trim((string)($row['Equipment'] ?? ''));
+                    if ($equipment === '') {
+                        continue;
+                    }
+                    $params = [];
+                    foreach ($fieldList as $field) {
+                        if ($field === 'Equipment') {
+                            $params[$field] = $equipment;
+                            continue;
+                        }
+                        if (array_key_exists($field, $row)) {
+                            $params[$field] = $row[$field];
+                        } else {
+                            $params[$field] = null;
+                        }
+                    }
+                    $insertStmt->execute($params);
+                    $newId = (int)$pdo->lastInsertId();
+                    if ($newId > 0) {
+                        $selectStmt->execute([$newId]);
+                        $inserted = $selectStmt->fetch();
+                        if ($inserted) {
+                            $insertedRows[] = $inserted;
+                            $insertedCount++;
+                        }
+                    }
                 }
             }
             $pdo->commit();
@@ -82,7 +127,12 @@ try {
             $pdo->rollBack();
             throw $e;
         }
-        json_response(['ok' => true, 'updated' => $updatedCount, 'items' => $updatedRows]);
+        json_response([
+            'ok' => true,
+            'updated' => $updatedCount,
+            'inserted' => $insertedCount,
+            'items' => array_merge($updatedRows, $insertedRows),
+        ]);
         exit;
     }
 
