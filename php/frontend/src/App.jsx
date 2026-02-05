@@ -10,6 +10,7 @@ import OilLog from './pages/OilLog.jsx';
 import OilApproval from './pages/OilApproval.jsx';
 import Reports from './pages/Reports.jsx';
 import Checklist from './pages/Checklist.jsx';
+import ChecklistAdmin from './pages/admin/ChecklistAdmin.jsx';
 import Login from './pages/Login.jsx';
 import MachinesAdmin from './pages/admin/MachinesAdmin.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
@@ -116,6 +117,14 @@ function AppShell() {
                         element={
                             <ProtectedRoute>
                                 <OilLogsAdmin />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin/checklist"
+                        element={
+                            <ProtectedRoute>
+                                <ChecklistAdmin />
                             </ProtectedRoute>
                         }
                     />

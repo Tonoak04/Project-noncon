@@ -366,15 +366,18 @@ export default function ReportsAdmin() {
 
     return (
         <div className="portal">
-            <section>
-                <div className="page-banner" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
-                    <button type="button" className="back-link" onClick={() => navigate('/admin')}>
-                        ย้อนกลับ
-                    </button>
-                    <h2 style={{ margin: 0 }}>รายงานปัญหา (Admin)</h2>
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            แสดง:
+            <div className="page-banner-wrapper">
+                <section className="page-banner page-banner--admin admin-reports-hero">
+                    <div className="page-banner__content">
+                        <p className="admin-eyebrow page-banner__eyebrow">ศูนย์รายงานเหตุขัดข้อง</p>
+                        <h1 className="page-banner__title">รายงานปัญหา (Admin)</h1>
+                        <p className="page-banner__subtitle">ติดตามสถานะการแจ้งซ่อมแบบเรียลไทม์และอัปเดตกลับไปยังศูนย์</p>
+                    </div>
+                    <div className="page-banner__actions admin-hero-actions">
+                        <button type="button" className="button ghost" onClick={() => navigate('/admin')}>
+                            ย้อนกลับ
+                        </button>
+                            <span>แสดง</span>
                             <select value={limit} onChange={(event) => setLimit(Number(event.target.value))}>
                                 {limitOptions.map((value) => (
                                     <option key={value} value={value}>
@@ -382,12 +385,13 @@ export default function ReportsAdmin() {
                                     </option>
                                 ))}
                             </select>
-                        </label>
-                        <button type="button" className="button" onClick={handleRefresh} disabled={loading}>
+                        <button type="button" className="button ghost" onClick={handleRefresh} disabled={loading}>
                             {loading ? 'กำลังโหลด...' : 'รีเฟรช'}
                         </button>
                     </div>
-                </div>
+                </section>
+            </div>
+            <section>
 
                 <div className="admin-report-toolbar">
                     <label>

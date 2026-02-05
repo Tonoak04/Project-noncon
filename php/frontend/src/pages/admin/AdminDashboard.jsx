@@ -10,7 +10,7 @@ export default function AdminDashboard() {
         { id: 'users-directory', title: 'รายชื่อผู้ใช้งาน (Users)', cta: 'ดูทั้งหมด', icon: 'https://cdn-icons-png.flaticon.com/512/747/747376.png', description: 'ดูข้อมูลและสถานะของผู้ใช้ทั้งหมด', to: '/admin/users/all' },
         { id: 'reports', title: 'รายงาน (Reports)', cta: 'จัดการรายงาน', icon: 'https://cdn-icons-png.flaticon.com/512/1828/1828911.png', description: 'ดูและจัดการรายงานปัญหา', to: '/admin/reports' },
         { id: 'oil-log', title: 'บันทึกน้ำมัน (Oil Logs)', cta: 'บันทึกน้ำมัน', icon: 'https://cdn-icons-png.flaticon.com/512/2966/2966425.png', description: 'บันทึกการเติมน้ำมัน/เช็คสต็อก', to: '/admin/oillogs' },
-        { id: 'checklist-viewer', title: 'ตรวจแบบฟอร์ม (Checklist)', cta: 'เปิดแบบฟอร์ม', icon: 'https://cdn-icons-png.flaticon.com/512/942/942748.png', description: 'เปิดดูแบบฟอร์มตรวจเช็ก (อ่านอย่างเดียว)', to: '/checklist' },
+        { id: 'checklist', title: 'ตรวจแบบฟอร์ม (Checklist)', cta: 'เปิดแบบฟอร์ม', icon: 'https://cdn-icons-png.flaticon.com/512/942/942748.png', description: 'เปิดและบันทึกแบบฟอร์มตรวจเช็ก', to: '/admin/checklist' },
         // { id: 'print', title: 'พิมพ์แบบฟอร์ม (Print)', cta: 'พิมพ์แบบฟอร์ม', icon: 'https://cdn-icons-png.flaticon.com/512/942/942748.png', description: 'พรีวิวและพิมพ์แบบฟอร์มตรวจเช็ก', to: '/admin/print' },
     ];
 

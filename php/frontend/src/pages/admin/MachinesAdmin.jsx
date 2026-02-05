@@ -42,7 +42,6 @@ export default function MachinesAdmin() {
                 setItems(data.items || []);
                 setIsAdminView(true);
             } catch (e) {
-                // if unauthorized, try public endpoint and switch to read-only view
                 if (e.status === 401) {
                     try {
                         const publicData = await apiGet('/api/machines.php?limit=5000');
@@ -61,28 +60,25 @@ export default function MachinesAdmin() {
         })();
     }, []);
 
-    
-
     const uniqueTypes = useMemo(() => {
         const set = new Set();
         items.forEach((it) => { if (it.Machine_Type) set.add(String(it.Machine_Type)); });
-        return Array.from(set).sort((a,b) => a.localeCompare(b));
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
     }, [items]);
 
     const uniqueClasses = useMemo(() => {
-        // classes within selected category if provided, otherwise all classes
         const set = new Set();
         const catLower = selectedCategory ? String(selectedCategory).toLowerCase() : '';
         items.forEach((it) => {
             if (selectedCategory) {
                 if (String(it.Machine_Type).toLowerCase() !== catLower) return;
             }
-            if (it.Class !== undefined && it.Class !== null && String(it.Class) !== '') set.add(String(it.Class));
+            if (it.Class !== undefined && it.Class !== null && String(it.Class) !== '') {
+                set.add(String(it.Class));
+            }
         });
-        return Array.from(set).sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     }, [items, selectedCategory]);
-
-    
 
     const [filterType, setFilterType] = useState('');
     const [filterClass, setFilterClass] = useState('');
@@ -93,7 +89,6 @@ export default function MachinesAdmin() {
     const [bulkStatus, setBulkStatus] = useState('');
     const [bulkUploading, setBulkUploading] = useState(false);
 
-    // if URL contains ?category=... set the filterType accordingly
     useEffect(() => {
         const cat = selectedCategory;
         if (!cat) return;
@@ -107,7 +102,10 @@ export default function MachinesAdmin() {
         const catObj = categoryList.find((c) => String(c.id).toLowerCase() === target);
         if (catObj) {
             const titleLower = (catObj.title || '').toLowerCase();
-            const match2 = uniqueTypes.find((t) => String(t).toLowerCase() === titleLower || String(t).toLowerCase().includes(titleLower));
+            const match2 = uniqueTypes.find((t) => {
+                const lower = String(t).toLowerCase();
+                return lower === titleLower || lower.includes(titleLower);
+            });
             if (match2) setFilterType(match2);
         }
     }, [selectedCategory, uniqueTypes]);
@@ -120,10 +118,12 @@ export default function MachinesAdmin() {
         if (filterClass) {
             out = out.filter((it) => String(it.Class) === filterClass);
         }
-        out.sort((a,b) => {
+        out.sort((a, b) => {
             const aLabel = (a.Equipment || a.Description || String(a.Machine_Id)).toString();
             const bLabel = (b.Equipment || b.Description || String(b.Machine_Id)).toString();
-            return sortOrder === 'az' ? aLabel.localeCompare(bLabel, undefined, {sensitivity:'base'}) : bLabel.localeCompare(aLabel, undefined, {sensitivity:'base'});
+            return sortOrder === 'az'
+                ? aLabel.localeCompare(bLabel, undefined, { sensitivity: 'base' })
+                : bLabel.localeCompare(aLabel, undefined, { sensitivity: 'base' });
         });
         return out;
     }, [items, filterType, filterClass, sortOrder]);
@@ -290,11 +290,15 @@ export default function MachinesAdmin() {
         }
     };
 
-    if (loading) return <div className="portal"><div className="loading-row">กำลังโหลดข้อมูล…</div></div>;
+    if (loading) {
+        return (
+            <div className="portal">
+                <div className="loading-row">กำลังโหลดข้อมูล…</div>
+            </div>
+        );
+    }
 
-    // If no category selected -> show category grid (type)
     if (!selectedCategory) {
-        // compute counts per category from items by Machine_Type (use lowercase keys)
         const counts = {};
         items.forEach((it) => {
             const t = String(it.Machine_Type || '').toLowerCase();
@@ -304,11 +308,21 @@ export default function MachinesAdmin() {
 
         return (
             <div className="portal">
+                <div className="page-banner-wrapper">
+                    <section className="page-banner page-banner--admin admin-machines-hero">
+                        <div className="page-banner__content">
+                            <p className="admin-eyebrow page-banner__eyebrow">ศูนย์ข้อมูลเครื่องจักร</p>
+                            <h1 className="page-banner__title">หมวดหมู่เครื่องจักร (Admin)</h1>
+                            <p className="page-banner__subtitle">เลือกหมวดหมู่เพื่อลงลึกจัดการคลาสและรายละเอียดเครื่องจักรทั้งหมด</p>
+                        </div>
+                        <div className="page-banner__actions admin-hero-actions">
+                            <button className="button ghost" type="button" onClick={() => navigate('/admin')}>
+                                ย้อนกลับ
+                            </button>
+                        </div>
+                    </section>
+                </div>
                 <section className="categories-page">
-                    <div className="page-banner">
-                        <button className="back-link" type="button" onClick={() => navigate('/admin')}>ย้อนกลับ</button>
-                        <h2>หมวดหมู่เครื่องจักร (Admin)</h2>
-                    </div>
                     {error && <div className="error-row">{error}</div>}
                     <div className="category-grid">
                         {categoryList.map((cat) => {
@@ -332,9 +346,7 @@ export default function MachinesAdmin() {
         );
     }
 
-    // If category selected but no class -> show classes for that category
     if (selectedCategory && !selectedClass) {
-        // compute classes in this category
         const map = new Map();
         for (const r of items) {
             if (String(r.Machine_Type).toLowerCase() !== String(selectedCategory).toLowerCase()) continue;
@@ -346,15 +358,25 @@ export default function MachinesAdmin() {
             map.set(key, prev);
         }
         const classesArr = Array.from(map.values()).sort((a, b) => a.cls.localeCompare(b.cls));
-        const catTitle = (categoryList.find(c => String(c.id) === String(selectedCategory))?.title) || selectedCategory;
+        const catTitle = (categoryList.find((c) => String(c.id) === String(selectedCategory))?.title) || selectedCategory;
 
         return (
             <div className="portal">
+                <div className="page-banner-wrapper">
+                    <section className="page-banner page-banner--admin admin-machines-hero">
+                        <div className="page-banner__content">
+                            <p className="admin-eyebrow page-banner__eyebrow">หมวดหมู่ {catTitle}</p>
+                            <h1 className="page-banner__title">เลือกคลาสเครื่องจักร</h1>
+                            <p className="page-banner__subtitle">ระบุคลาสเพื่อดูจำนวนเครื่องจักรและเข้าสู่หน้าจัดการเชิงลึก</p>
+                        </div>
+                        <div className="page-banner__actions admin-hero-actions">
+                            <button className="button ghost" type="button" onClick={() => navigate('/admin/machines')}>
+                                ย้อนกลับ
+                            </button>
+                        </div>
+                    </section>
+                </div>
                 <section className="classes-page">
-                    <div className="page-banner">
-                        <button className="back-link" type="button" onClick={() => navigate(`/admin/machines`)}>ย้อนกลับ</button>
-                        <h2>{catTitle} (Admin)</h2>
-                    </div>
                     <div className="category-grid">
                         {classesArr.map((c) => (
                             <button
@@ -375,72 +397,109 @@ export default function MachinesAdmin() {
         );
     }
 
-    // Otherwise show machines for selected category+class (admin list with controls)
-    // Build list by explicitly filtering items by selectedCategory/selectedClass (case-insensitive)
     const machinesForClass = items.filter((m) => {
         if (selectedCategory && String(m.Machine_Type).toLowerCase() !== String(selectedCategory).toLowerCase()) return false;
         if (selectedClass && String(m.Class) !== String(selectedClass)) return false;
         return true;
-    }).sort((a,b) => {
+    }).sort((a, b) => {
         const aLabel = (a.Equipment || a.Description || String(a.Machine_Id)).toString();
         const bLabel = (b.Equipment || b.Description || String(b.Machine_Id)).toString();
-        return sortOrder === 'az' ? aLabel.localeCompare(bLabel, undefined, {sensitivity:'base'}) : bLabel.localeCompare(aLabel, undefined, {sensitivity:'base'});
+        return sortOrder === 'az'
+            ? aLabel.localeCompare(bLabel, undefined, { sensitivity: 'base' })
+            : bLabel.localeCompare(aLabel, undefined, { sensitivity: 'base' });
     });
 
     return (
         <div className="portal">
+            <div className="page-banner-wrapper">
+                <section className="page-banner page-banner--admin admin-machines-hero">
+                    <div className="page-banner__content">
+                        <p className="admin-eyebrow page-banner__eyebrow">
+                            หมวด {selectedCategory || '-'}{selectedClass ? ` · คลาส ${selectedClass}` : ''}
+                        </p>
+                        <h1 className="page-banner__title">จัดการเครื่องจักร</h1>
+                        <p className="page-banner__subtitle">
+                            {isAdminView
+                                ? 'อัปเดตรายการเครื่องจักร แก้ไขข้อมูล และอัปโหลดไฟล์สรุปได้จากที่นี่'
+                                : 'กำลังแสดงแบบอ่านอย่างเดียว เนื่องจากบัญชีนี้ไม่มีสิทธิ์ admin'}
+                        </p>
+                    </div>
+                    <div className="page-banner__actions admin-hero-actions">
+                        <button
+                            className="button ghost"
+                            type="button"
+                            onClick={() => navigate(`/admin/machines?category=${encodeURIComponent(selectedCategory)}`)}
+                        >
+                            ย้อนกลับ
+                        </button>
+                        {isAdminView ? (
+                            <>
+                                <button className="button primary" type="button" onClick={handleExcelButton} disabled={bulkUploading}>
+                                    {bulkUploading ? 'กำลังอัปโหลด…' : 'อัปโหลด Excel/CSV'}
+                                </button>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".xlsx,.xls,.csv"
+                                    style={{ display: 'none' }}
+                                    onChange={handleExcelFile}
+                                />
+                            </>
+                        ) : (
+                            <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>โหมดอ่านอย่างเดียว</span>
+                        )}
+                    </div>
+                </section>
+            </div>
             <section>
-                    <div className="page-banner" style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-                    <button className="back-link" type="button" onClick={() => navigate(`/admin/machines?category=${encodeURIComponent(selectedCategory)}`)}>ย้อนกลับ</button>
-                    <h2 style={{margin:0}}>จัดการเครื่องจักร (Admin)</h2>
-                    {isAdminView && (
-                        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
-                            <button className="button primary" type="button" onClick={handleExcelButton} disabled={bulkUploading}>
-                                {bulkUploading ? 'กำลังอัปโหลด…' : 'อัปโหลดไฟล์ Excel/CSV'}
-                            </button>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".xlsx,.xls,.csv"
-                                style={{display:'none'}}
-                                onChange={handleExcelFile}
-                            />
-                        </div>
-                    )}
-                    {/* <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
-                        {isAdminView && user && (
-                            <button className="button primary" onClick={handleCreate}>สร้างใหม่</button>
-                        )}
-                        {!isAdminView && (
-                            <div style={{fontSize:13,color:'#fff',opacity:0.8}}>กำลังแสดงแบบอ่านอย่างเดียว (ไม่ใช่ admin)</div>
-                        )}
-                    </div> */}
-                </div>
-
                 {error && <div className="error-row">{error}</div>}
                 {isAdminView && bulkStatus && (
-                    <p className="text-muted" style={{marginTop:8}}>{bulkStatus}</p>
+                    <p className="text-muted" style={{ marginTop: 8 }}>{bulkStatus}</p>
                 )}
                 <ul className="machine-list">
                     {machinesForClass.map((machine) => (
                         <li key={machine.Machine_Id}>
-                            <div className="machine-link" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}} onClick={() => {
-                                const parts = [];
-                                if (selectedCategory) parts.push(`category=${encodeURIComponent(selectedCategory)}`);
-                                if (selectedClass) parts.push(`class=${encodeURIComponent(selectedClass)}`);
-                                parts.push('admin=1');
-                                const qs = parts.length ? `?${parts.join('&')}` : '';
-                                navigate(`/machines/${machine.Machine_Id}${qs}`);
-                            }}>
+                            <div
+                                className="machine-link"
+                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                onClick={() => {
+                                    const parts = [];
+                                    if (selectedCategory) parts.push(`category=${encodeURIComponent(selectedCategory)}`);
+                                    if (selectedClass) parts.push(`class=${encodeURIComponent(selectedClass)}`);
+                                    parts.push('admin=1');
+                                    const qs = parts.length ? `?${parts.join('&')}` : '';
+                                    navigate(`/machines/${machine.Machine_Id}${qs}`);
+                                }}
+                            >
                                 {editingId === machine.Machine_Id ? (
                                     <>
-                                        <div style={{flex:1}} onClick={(e) => e.stopPropagation()}>
-                                            <input style={{width:'100%',marginBottom:6}} value={editingData.Equipment || ''} onChange={(e) => setEditingData((s) => ({...s, Equipment: e.target.value}))} onClick={(e)=>e.stopPropagation()} />
-                                            <input style={{width:'100%',marginBottom:6}} value={editingData.Description || ''} onChange={(e) => setEditingData((s) => ({...s, Description: e.target.value}))} onClick={(e)=>e.stopPropagation()} />
-                                            <input style={{width:'48%',marginRight:'4%'}} value={editingData.Class || ''} onChange={(e) => setEditingData((s) => ({...s, Class: e.target.value}))} onClick={(e)=>e.stopPropagation()} />
-                                            <input style={{width:'48%'}} value={editingData.License_plate_Number || ''} onChange={(e) => setEditingData((s) => ({...s, License_plate_Number: e.target.value}))} onClick={(e)=>e.stopPropagation()} />
+                                        <div style={{ flex: 1 }} onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                style={{ width: '100%', marginBottom: 6 }}
+                                                value={editingData.Equipment || ''}
+                                                onChange={(e) => setEditingData((s) => ({ ...s, Equipment: e.target.value }))}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <input
+                                                style={{ width: '100%', marginBottom: 6 }}
+                                                value={editingData.Description || ''}
+                                                onChange={(e) => setEditingData((s) => ({ ...s, Description: e.target.value }))}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <input
+                                                style={{ width: '48%', marginRight: '4%' }}
+                                                value={editingData.Class || ''}
+                                                onChange={(e) => setEditingData((s) => ({ ...s, Class: e.target.value }))}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <input
+                                                style={{ width: '48%' }}
+                                                value={editingData.License_plate_Number || ''}
+                                                onChange={(e) => setEditingData((s) => ({ ...s, License_plate_Number: e.target.value }))}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
                                         </div>
-                                        <div style={{display:'flex',gap:8}} onClick={(e) => e.stopPropagation()}>
+                                        <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
                                             <button className="button primary" onClick={handleSave}>บันทึก</button>
                                             <button className="button" onClick={handleCancel}>ยกเลิก</button>
                                             <button className="button ghost" onClick={() => handleDelete(machine)}>ลบ</button>
@@ -449,15 +508,18 @@ export default function MachinesAdmin() {
                                 ) : (
                                     <>
                                         <div>
-                                            <h3 style={{margin:0}}>{(machine.Equipment || `#${machine.Machine_Id}`).toString()}</h3>
-                                            <p style={{margin:0}}>{machine.Description || '-'}</p>
-                                            <small style={{color:'#666'}}>{machine.Machine_Type ? (`ประเภท: ${categoryList.find(c=>c.id===String(machine.Machine_Type))?.title || machine.Machine_Type}`) : ''} {machine.Class ? ` · Class: ${machine.Class}` : ''}</small>
+                                            <h3 style={{ margin: 0 }}>{(machine.Equipment || `#${machine.Machine_Id}`).toString()}</h3>
+                                            <p style={{ margin: 0 }}>{machine.Description || '-'}</p>
+                                            <small style={{ color: '#666' }}>
+                                                {machine.Machine_Type
+                                                    ? `ประเภท: ${categoryList.find((c) => c.id === String(machine.Machine_Type))?.title || machine.Machine_Type}`
+                                                    : ''}
+                                                {machine.Class ? ` · Class: ${machine.Class}` : ''}
+                                            </small>
                                         </div>
-                                        <div style={{display:'flex',gap:8}} onClick={(e) => e.stopPropagation()}>
+                                        <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
                                             {isAdminView && (
-                                                <>
-                                                    <button className="button ghost" onClick={() => handleDelete(machine)}>ลบ</button>
-                                                </>
+                                                <button className="button ghost" onClick={() => handleDelete(machine)}>ลบ</button>
                                             )}
                                         </div>
                                     </>

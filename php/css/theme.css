@@ -79,6 +79,147 @@ body {
     box-sizing: border-box;
 }
 
+.page-banner-wrapper {
+    width: 100%;
+    margin: 0 auto clamp(1rem, 3vw, 1.75rem);
+}
+
+.page-banner {
+    border-radius: 26px;
+    padding: clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 4vw, 2.75rem);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: clamp(1rem, 3vw, 2rem);
+    box-shadow: 0 25px 55px rgba(5, 12, 31, 0.15);
+}
+
+.page-banner--admin {
+    background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.35), transparent 45%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.45), transparent 50%),
+        linear-gradient(135deg, #050c1f, #11275b, #1f3f9a);
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+}
+
+.page-banner--admin::before,
+.page-banner--admin::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.3;
+    background-repeat: no-repeat;
+}
+
+.page-banner--admin::before {
+    background-image: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.35), transparent 45%),
+        radial-gradient(circle at 80% 0%, rgba(125, 211, 252, 0.35), transparent 50%);
+    filter: blur(0.5px);
+}
+
+.page-banner--admin::after {
+    background-image: url("data:image/svg+xml,%3Csvg width='400' height='200' viewBox='0 0 400 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 150 C80 120 120 180 200 150 C280 120 320 180 400 150' fill='none' stroke='rgba(255,255,255,0.15)' stroke-width='1.5'/%3E%3C/svg%3E");
+    opacity: 0.6;
+    background-size: cover;
+    mix-blend-mode: screen;
+}
+
+.page-banner--admin .page-banner__content,
+.page-banner--admin .page-banner__actions {
+    position: relative;
+    z-index: 1;
+}
+
+.page-banner--user {
+    background: #fff;
+    color: var(--text-primary);
+    border: 1px solid rgba(15, 35, 58, 0.08);
+    box-shadow: 0 20px 45px rgba(15, 35, 58, 0.08);
+}
+
+.page-banner__content {
+    flex: 1 1 320px;
+}
+
+.page-banner__meta {
+    flex: 1 1 320px;
+}
+
+.page-banner__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.page-banner__eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+    opacity: 0.85;
+}
+
+.page-banner__title {
+    margin: 0 0 0.35rem;
+}
+
+.page-banner__subtitle {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.page-banner--user .page-banner__subtitle {
+    color: #475467;
+}
+
+.page-banner__pill {
+    display: inline-flex;
+    border-radius: 999px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.page-banner--user .page-banner__pill {
+    background: rgba(15, 35, 58, 0.08);
+    color: #475467;
+}
+
+@media (max-width: 768px) {
+    .page-banner__actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+section[class*="admin-"][class*="-hero"],
+header[class*="admin-"][class*="-hero"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding: 1.75rem 2rem;
+    border-radius: 28px;
+    background: linear-gradient(120deg, #050c1f, #0e2153, #1f3f9a);
+    color: #fff;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 25px 55px rgba(5, 12, 31, 0.35);
+}
+
+@media (max-width: 768px) {
+    section[class*="admin-"][class*="-hero"],
+    header[class*="admin-"][class*="-hero"] {
+        flex-direction: column;
+        padding: 1.5rem;
+    }
+}
+
 @media (max-width: 640px) {
     .app-brand-bar {
         width: calc(100% - 1.5rem);
@@ -1419,13 +1560,13 @@ body {
 
 .button.ghost {
     background: transparent;
-    border: 1px solid rgba(15, 62, 104, 0.35);
-    color: #0f3e68;
+    border: 1px solid rgba(0, 136, 255, 0.35);
+    color: #ffffff;
 }
 
 .button.ghost:hover {
-    border-color: rgba(15, 62, 104, 0.6);
-    color: #062033;
+    border-color: #ffffff;
+    color: #1f78d1;
 }
 
 @media (max-width: 768px) {

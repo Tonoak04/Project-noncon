@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const roleOptions = [
-    { value: 'admin', label: 'Admin / ผู้ดูแล' },
-    { value: 'operator', label: 'หัวหน้างาน' },
-    { value: 'inspector', label: 'ผู้ตรวจสอบ' },
-    { value: 'viewer', label: 'อ่านอย่างเดียว' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'operator', label: 'เยื่ยมชมเว็บไซต์' },
+    { value: 'driver', label: 'พลขับรถ' },
+    { value: 'foreman', label: 'ผู้ตรวจสอบ(รถ)' },
+    { value: 'assistant', label: 'ผู้ตรวจสอบ(น้ำมัน)' },
+    { value: 'oiler', label: 'คนจ่ายน้ำมัน' },
 ];
 
 const departmentOptions = [
@@ -44,7 +46,9 @@ const buildModuleState = () => moduleOptions.reduce((acc, option) => {
 
 const createEmptyForm = () => ({
     fullName: '',
+    centerName: '',
     username: '',
+    employeeId: '',
     email: '',
     phone: '',
     roles: ['operator'],
@@ -67,7 +71,9 @@ const mapDirectoryUserToForm = (user) => {
     return {
         ...template,
         fullName: user.fullName || template.fullName,
+        centerName: user.centerName || template.centerName,
         username: user.username || template.username,
+        employeeId: user.employeeId || template.employeeId,
         phone: user.phone || template.phone,
         roles: user.roles?.length ? [...user.roles] : template.roles,
         note: user.centerName ? `ข้อมูลจาก ${user.centerName}` : template.note,
@@ -92,7 +98,6 @@ const roleColors = {
     admin: '#f0506e',
     operator: '#2c8bff',
     inspector: '#865dff',
-    viewer: '#5f6b7b',
 };
 
 const describeStrength = (password) => {
@@ -155,6 +160,12 @@ export default function UsersAdmin() {
         if (!emailPattern.test(form.email.trim())) {
             errors.email = 'รูปแบบอีเมลไม่ถูกต้อง';
         }
+        if (!form.centerName.trim()) {
+            errors.centerName = 'กรุณากรอกชื่อศูนย์/หน่วยงาน';
+        }
+        if (!form.employeeId.trim()) {
+            errors.employeeId = 'กรุณากรอกรหัสพนักงาน (Employee ID)';
+        }
         if (form.phone && !phonePattern.test(form.phone.trim())) {
             errors.phone = 'เบอร์โทรไม่ถูกต้อง';
         }
@@ -211,15 +222,9 @@ export default function UsersAdmin() {
         setForm((prev) => ({ ...prev, [field]: event.target.checked }));
     };
 
-    const handleRoleToggle = (value) => () => {
-        setForm((prev) => {
-            const currentRoles = Array.isArray(prev.roles) ? prev.roles : [];
-            const exists = currentRoles.includes(value);
-            const nextRoles = exists
-                ? currentRoles.filter((role) => role !== value)
-                : [...currentRoles, value];
-            return { ...prev, roles: nextRoles };
-        });
+    const handleRolesSelectChange = (event) => {
+        const selectedRoles = Array.from(event.target.selectedOptions || []).map((option) => option.value);
+        setForm((prev) => ({ ...prev, roles: selectedRoles }));
         if (formErrors.roles) {
             setFormErrors((prev) => {
                 const next = { ...prev };
@@ -278,7 +283,9 @@ export default function UsersAdmin() {
         const newUser = {
             id: `USR-${(Math.floor(Math.random() * 9000) + 1000).toString()}`,
             fullName: form.fullName.trim(),
+            centerName: form.centerName.trim(),
             username: form.username.trim(),
+            employeeId: form.employeeId.trim(),
             email: form.email.trim(),
             phone: form.phone.trim(),
             department: form.department,
@@ -313,16 +320,23 @@ export default function UsersAdmin() {
 
     return (
         <div className="portal admin-users">
-            <section className="page-banner admin-users__banner">
-                <div className="admin-users__banner-info">
-                    <button className="back-link" type="button" onClick={() => navigate('/admin')}>
-                        ย้อนกลับ
-                    </button>
-                    <div>
-                        <h2>ศูนย์จัดการผู้ใช้งาน</h2> 
+            <div className="page-banner-wrapper">
+                <section className="page-banner page-banner--admin admin-users--hero">
+                    <div className="page-banner__content">
+                        <p className="admin-eyebrow page-banner__eyebrow">ศูนย์ควบคุมสิทธิ์</p>
+                        <h1 className="page-banner__title">ศูนย์จัดการผู้ใช้งาน</h1>
+                        <p className="page-banner__subtitle">เพิ่มสิทธิ์ แก้ไขรายละเอียด และเชิญทีมงานเข้าสู่ระบบได้จากจุดเดียว</p>
                     </div>
-                </div>
-            </section>
+                    <div className="page-banner__actions admin-hero-actions">
+                        <button className="button ghost" type="button" onClick={() => navigate('/admin')}>
+                            ย้อนกลับ
+                        </button>
+                        <button type="button" className="button ghost" onClick={() => navigate('/admin/users/all')}>
+                            ดูรายชื่อทั้งหมด
+                        </button>
+                    </div>
+                </section>
+            </div>
 
             {flashMessage && (
                 <div className="alert success admin-users__alert">
@@ -342,13 +356,6 @@ export default function UsersAdmin() {
                                 </div>
                             )}
                         </div>
-                        <button
-                            type="button"
-                            className="button ghost"
-                            onClick={() => navigate('/admin/users/all')}
-                        >
-                            ดูรายชื่อทั้งหมด
-                        </button>
                     </header>
 
                     <label className="form-field">
@@ -361,6 +368,20 @@ export default function UsersAdmin() {
 
                     <label className="form-field">
                         <span>
+                            ศูนย์/หน่วยงาน (Center Name) <span className="required-mark">*</span>
+                        </span>
+                        <input
+                            type="text"
+                            value={form.centerName}
+                            onChange={updateFormField('centerName')}
+                            placeholder="เช่น Main Center"
+                            required
+                        />
+                        {formErrors.centerName && <small className="error-row">{formErrors.centerName}</small>}
+                    </label>
+
+                    <label className="form-field">
+                        <span>
                             รหัสพนักงาน (Username) <span className="required-mark">*</span>
                         </span>
                         <input type="text" value={form.username} onChange={updateFormField('username')} placeholder="รหัสพนักงาน" required />
@@ -368,9 +389,17 @@ export default function UsersAdmin() {
                     </label>
 
                     <label className="form-field">
-                        <span>อีเมล </span>
-                        <input type="email" value={form.email} onChange={updateFormField('email')} placeholder="name@example.com" />
-                        {formErrors.email && <small className="error-row">{formErrors.email}</small>}
+                        <span>
+                            หมายเลขพนักงาน (Employee ID) <span className="required-mark">*</span>
+                        </span>
+                        <input
+                            type="text"
+                            value={form.employeeId}
+                            onChange={updateFormField('employeeId')}
+                            placeholder="เช่น EMP-00123"
+                            required
+                        />
+                        {formErrors.employeeId && <small className="error-row">{formErrors.employeeId}</small>}
                     </label>
 
                     <div className="form-field">
@@ -381,41 +410,28 @@ export default function UsersAdmin() {
                         {formErrors.phone && <small className="error-row">{formErrors.phone}</small>}
                     </div>
 
-                    <div className="form-field">
+                    <label className="form-field">
                         <span>
                             สิทธิ์ในระบบ <span className="required-mark">*</span>
                         </span>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginTop: 8 }}>
-                            {roleOptions.map((role) => {
-                                const checked = (form.roles || []).includes(role.value);
-                                return (
-                                    <label
-                                        key={role.value}
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            border: '1px solid rgba(15, 35, 58, 0.15)',
-                                            borderRadius: 12,
-                                            padding: '8px 12px',
-                                            cursor: 'pointer',
-                                            background: checked ? 'rgba(44, 139, 255, 0.08)' : '#fff',
-                                            transition: 'background 0.2s ease, border 0.2s ease',
-                                        }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={handleRoleToggle(role.value)}
-                                            style={{ accentColor: '#2c8bff' }}
-                                        />
-                                        <span>{role.label}</span>
-                                    </label>
-                                );
-                            })}
-                        </div>
+                        <select
+                            multiple
+                            size={Math.min(roleOptions.length, 6)}
+                            value={form.roles}
+                            onChange={handleRolesSelectChange}
+                            style={{ minHeight: 140 }}
+                        >
+                            {roleOptions.map((role) => (
+                                <option key={role.value} value={role.value}>
+                                    {role.label}
+                                </option>
+                            ))}
+                        </select>
+                        <small className="muted" style={{ display: 'block', marginTop: 4 }}>
+                            กด Ctrl (หรือ Cmd บน Mac) เพื่อเลือกได้หลายบทบาท
+                        </small>
                         {formErrors.roles && <small className="error-row">{formErrors.roles}</small>}
-                    </div>
+                    </label>
 
                     <label className="form-field">
                         <span>

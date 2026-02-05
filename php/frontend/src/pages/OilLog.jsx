@@ -13,7 +13,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx';
 
 
-import ปลากรอบ from '../images/ปลากรอบ.jpg';
+import oil from '../images/oil.jpg';
 
 
 const workTypes = ['งานปกติ', 'งานพิเศษ', 'งานซ่อมบำรุง'];
@@ -1091,7 +1091,6 @@ export default function OilLog() {
                         <h2>ใบรายงานการปฏิบัติงานและบันทึกน้ำมัน</h2>
                     </div>
                 </div>
-
                 <div className="oil-log-layout">
                     <form className="oil-log-form" onSubmit={handleSubmit}>
                         <header>
@@ -1123,7 +1122,6 @@ export default function OilLog() {
                                 <input type="text" value={form.locationName} onChange={handleChange('locationName')} placeholder="เช่น ไซต์ A" required/>
                             </label>
                         </div>
-
                         <header>
                             <h3>รายละเอียดเครื่องจักร</h3>
                         </header>
@@ -1497,10 +1495,10 @@ export default function OilLog() {
                             
                             {/* เล่นๆโดนด่าก่อนเดี๋ยวมาลบ */}
                             <p>
-                            <img src={ปลากรอบ} alt="ปลากรอบ" style={{maxWidth: '200px', display: 'block', marginTop: '8px', marginLeft: 'auto', marginRight: 'auto'}} 
+                            <img src={oil} alt="oil" style={{maxWidth: '300px', display: 'block', marginTop: '8px', marginLeft: 'auto', marginRight: 'auto'}} 
                             />
                             </p>
-                            <p style={{marginRight:'auto', marginLeft:'auto' , maxWidth:'100px' , color:'black'}}>ภาพปลากรอบ</p>
+                            <p style={{marginRight:'auto', marginLeft:'auto' , maxWidth:'100px' , color:'black'}}>ภาพประกอบ</p>
                         
                         </header>
                         <div className="photo-upload-card">

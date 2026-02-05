@@ -389,16 +389,21 @@ export default function OilLogsAdmin() {
 
     return (
         <div className="portal">
-            <section className="admin-oil-page">
-                <div className="page-banner">
-                    <button type="button" className="back-link" onClick={() => navigate('/admin')}>
-                        ย้อนกลับ
-                    </button>
-                    <div>
-                        <h2>หลังบ้าน · บันทึกน้ำมัน</h2>
-                        <p className="text-muted">ตรวจสอบรายการเบิกน้ำมันแบบเรียลไทม์ พร้อมสรุปปริมาณและส่งออกไฟล์ได้</p>
+            <div className="page-banner-wrapper">
+                <section className="page-banner page-banner--admin admin-oil-hero">
+                    <div className="page-banner__content">
+                        <p className="admin-eyebrow page-banner__eyebrow">ศูนย์ข้อมูลน้ำมัน</p>
+                        <h1 className="page-banner__title">หลังบ้าน · บันทึกน้ำมัน</h1>
+                        <p className="page-banner__subtitle">ตรวจสอบรายการเบิกน้ำมันแบบเรียลไทม์ พร้อมสรุปปริมาณและส่งออกไฟล์ได้</p>
                     </div>
-                </div>
+                    <div className="page-banner__actions admin-hero-actions">
+                        <button type="button" className="button ghost" onClick={() => navigate('/admin')}>
+                            ย้อนกลับ
+                        </button>
+                    </div>
+                </section>
+            </div>
+            <section className="admin-oil-page">
 
                 <form className="oil-filter" onSubmit={applyFilters}>
                     <label>

@@ -4,9 +4,12 @@ import { apiGet } from '../../api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 const roleDictionary = {
     admin: 'ผู้ดูแลระบบ',
-    operator: 'หัวหน้างาน',
+    operator: 'ผู้ใช้งานดูได้ทั้งเว็บ',
     inspector: 'ผู้ตรวจสอบ',
-    viewer: 'อ่านอย่างเดียว',
+    assistant: 'ผู้ตรวจสอบ(น้ำมัน)',
+    driver: 'พลขับรถ',
+    foreman: 'ผู้ตรวจสอบ(รถ)',
+    oiler: 'คนจ่ายน้ำมัน',
 };
 const PencilIcon = () => (
     <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -247,19 +250,23 @@ export default function UsersDirectory() {
     );
     return (
         <div className="portal users-directory">
-            <section className="page-banner users-directory__banner">
-                <div>
-                    <button className="back-link" type="button" onClick={() => navigate('/admin')}>
-                        ย้อนกลับ
-                    </button>
-                    <h2>ภาพรวมผู้ใช้งาน</h2>
-                </div>
-                <div className="users-directory__banner-actions">
-                    <button type="button" className="button ghost" onClick={() => navigate('/admin/users')}>
-                        + เพิ่มผู้ใช้งาน
-                    </button>
-                </div>
-            </section>
+            <div className="page-banner-wrapper">
+                <section className="page-banner page-banner--admin admin-directory--hero">
+                    <div className="page-banner__content">
+                        <p className="admin-eyebrow page-banner__eyebrow">ฐานข้อมูลผู้ใช้งาน</p>
+                        <h1 className="page-banner__title">ภาพรวมผู้ใช้งาน</h1>
+                        <p className="page-banner__subtitle">ตรวจสอบสถานะผู้ใช้งานและจัดการสิทธิ์จากทุกศูนย์ได้ในหน้าจอเดียว</p>
+                    </div>
+                    <div className="page-banner__actions admin-hero-actions">
+                        <button className="button ghost" type="button" onClick={() => navigate('/admin')}>
+                            ย้อนกลับ
+                        </button>
+                        <button type="button" className="button ghost" onClick={() => navigate('/admin/users')}>
+                            + เพิ่มผู้ใช้งาน
+                        </button>
+                    </div>
+                </section>
+            </div>
             <section className="floating-panel users-directory__filters">
                 <div className="users-directory__filters-row">
                     <label>

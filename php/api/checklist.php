@@ -89,22 +89,57 @@ function resolve_machine(PDO $pdo, ?int $machineId, string $machineCode): ?array
     return null;
 }
 
-function get_daily_form(PDO $pdo, int $machineId, int $year, int $month): ?array
+function get_daily_form(PDO $pdo, int $machineId, int $year, int $month, ?string $department = null): ?array
 {
-    $stmt = $pdo->prepare('SELECT DailyForm_Id, Machine_Id, Center_Id, Form_Month, Form_Year FROM DailyForm WHERE Machine_Id = ? AND Form_Year = ? AND Form_Month = ? LIMIT 1');
-    $stmt->execute([$machineId, $year, $month]);
+    $departmentKey = $department !== null && $department !== '' ? mb_substr($department, 0, 255) : null;
+    $baseSql = 'SELECT DailyForm_Id, Machine_Id, Center_Id, Form_Month, Form_Year, Unit_Work FROM DailyForm WHERE Machine_Id = ? AND Form_Year = ? AND Form_Month = ?';
+    $params = [$machineId, $year, $month];
+
+    if ($departmentKey !== null) {
+        $stmt = $pdo->prepare($baseSql . ' AND Unit_Work = ? LIMIT 1');
+        $paramsWithDepartment = array_merge($params, [$departmentKey]);
+        $stmt->execute($paramsWithDepartment);
+        $row = $stmt->fetch();
+        if ($row) {
+            return $row;
+        }
+
+        // Legacy fallback: locate forms that were saved before department linkage existed.
+        $stmt = $pdo->prepare($baseSql . " AND (Unit_Work IS NULL OR Unit_Work = '') LIMIT 1");
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    $stmt = $pdo->prepare($baseSql . ' LIMIT 1');
+    $stmt->execute($params);
     $row = $stmt->fetch();
     return $row ?: null;
 }
 
-function ensure_daily_form(PDO $pdo, int $machineId, int $centerId, int $year, int $month): int
+function ensure_daily_form(PDO $pdo, int $machineId, int $centerId, int $year, int $month, ?string $department = null): int
 {
-    $existing = get_daily_form($pdo, $machineId, $year, $month);
+    $department = $department !== null && $department !== '' ? mb_substr($department, 0, 255) : null;
+    $existing = get_daily_form($pdo, $machineId, $year, $month, $department);
+
     if ($existing) {
+        $updates = [];
+        $params = [];
+        if ($department !== null && (string)($existing['Unit_Work'] ?? '') !== $department) {
+            $updates[] = 'Unit_Work = ?';
+            $params[] = $department;
+        }
+        if ($updates) {
+            $params[] = (int)$existing['DailyForm_Id'];
+            $sql = 'UPDATE DailyForm SET ' . implode(', ', $updates) . ' WHERE DailyForm_Id = ? LIMIT 1';
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+        }
         return (int)$existing['DailyForm_Id'];
     }
-    $stmt = $pdo->prepare("INSERT INTO DailyForm (Machine_Id, Center_Id, Form_Month, Form_Year, Overall_Status) VALUES (?, ?, ?, ?, '-')");
-    $stmt->execute([$machineId, $centerId, $month, $year]);
+
+    $stmt = $pdo->prepare("INSERT INTO DailyForm (Machine_Id, Center_Id, Form_Month, Form_Year, Unit_Work, Overall_Status) VALUES (?, ?, ?, ?, ?, '-')");
+    $stmt->execute([$machineId, $centerId, $month, $year, $department]);
     return (int)$pdo->lastInsertId();
 }
 
@@ -222,9 +257,13 @@ function handle_checklist_get(array $user): void
     $machineIdParam = isset($_GET['machineId']) ? (int)$_GET['machineId'] : null;
     $machineCode = isset($_GET['machine']) ? trim((string)$_GET['machine']) : '';
     $periodRaw = isset($_GET['period']) ? trim((string)$_GET['period']) : '';
+    $departmentName = isset($_GET['department']) ? trim((string)$_GET['department']) : '';
 
     if ($periodRaw === '' || ($machineIdParam === null && $machineCode === '')) {
         throw new InvalidArgumentException('ต้องระบุรหัสเครื่องและเดือน/ปี');
+    }
+    if ($departmentName === '') {
+        throw new InvalidArgumentException('ต้องระบุหน่วยงาน');
     }
 
     $period = parse_period($periodRaw);
@@ -234,7 +273,7 @@ function handle_checklist_get(array $user): void
         return;
     }
 
-    $form = get_daily_form($pdo, (int)$machine['Machine_Id'], $period['year'], $period['month']);
+    $form = get_daily_form($pdo, (int)$machine['Machine_Id'], $period['year'], $period['month'], $departmentName);
     $driverValues = [];
     $foremanValues = [];
     $itemMatrix = [];
@@ -246,6 +285,13 @@ function handle_checklist_get(array $user): void
         $itemMatrix = load_item_results($pdo, (int)$form['DailyForm_Id']);
     }
 
+    $meta = null;
+    if ($form) {
+        $meta = [
+            'department' => $form['Unit_Work'] ?? null,
+        ];
+    }
+
     json_response([
         'machine' => [
             'id' => (int)$machine['Machine_Id'],
@@ -253,6 +299,7 @@ function handle_checklist_get(array $user): void
             'description' => $machine['Description'] ?? null,
         ],
         'period' => $period,
+        'meta' => $meta,
         'items' => [
             'values' => $itemMatrix,
         ],
@@ -285,6 +332,7 @@ function handle_checklist_post(array $user): void
     $signatures = isset($payload['signatures']) && is_array($payload['signatures']) ? $payload['signatures'] : [];
     $itemsPayload = isset($payload['items']) && is_array($payload['items']) ? $payload['items'] : [];
     $signatureType = isset($payload['signatureType']) ? strtolower(trim((string)$payload['signatureType'])) : ($isForeman ? 'foreman' : 'driver');
+    $departmentName = isset($payload['department']) ? trim((string)$payload['department']) : '';
 
     if (!in_array($signatureType, ['driver', 'foreman'], true)) {
         throw new InvalidArgumentException('ไม่รู้จักประเภทลายเซ็น');
@@ -300,6 +348,9 @@ function handle_checklist_post(array $user): void
 
     if ($periodRaw === '' || ($machineIdParam === null && $machineCode === '')) {
         throw new InvalidArgumentException('กรุณากรอกข้อมูลให้ครบถ้วน');
+    }
+    if ($departmentName === '') {
+        throw new InvalidArgumentException('กรุณาระบุหน่วยงาน');
     }
 
     $hasSignatures = false;
@@ -335,7 +386,7 @@ function handle_checklist_post(array $user): void
         if (!$machine) {
             throw new ChecklistNotFoundException('ไม่พบข้อมูลเครื่องจักร');
         }
-        $formId = ensure_daily_form($pdo, (int)$machine['Machine_Id'], (int)$user['Center_Id'], $period['year'], $period['month']);
+        $formId = ensure_daily_form($pdo, (int)$machine['Machine_Id'], (int)$user['Center_Id'], $period['year'], $period['month'], $departmentName);
         $employeeId = (string)($user['employeeId'] ?? $user['Username'] ?? '');
         $signatureValue = build_signature_string($user);
 

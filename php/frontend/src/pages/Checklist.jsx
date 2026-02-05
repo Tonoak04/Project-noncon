@@ -1,281 +1,129 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
-
-const DAY_COLUMNS = Array.from({ length: 31 }, (_, index) => index + 1);
-
-const STATUS_OPTIONS = [
-    { value: '', label: '-' },
-    { value: 'ปกติ', label: '✓ ปกติ' },
-    { value: 'ผิดปกติ', label: '✗ ผิดปกติ' },
-    { value: 'S', label: 'S (Stand by)' },
-    { value: 'B', label: 'B (จอดซ่อม)' },
-];
-
-const LEGEND = [
-    { symbol: '✓', label: 'ปกติ' },
-    { symbol: '✗', label: 'ผิดปกติ' },
-    { symbol: 'S', label: 'กรณีเครื่องจักร จอด Stand by' },
-    { symbol: 'B', label: 'กรณีเครื่องจักรเสีย จอดซ่อม' },
-];
-
-const CHECKLIST_ITEMS = [
-    { order: 1, topic: 'ระดับน้ำมันเครื่อง', method: 'อยู่ระดับที่กำหนด', frequency: 'รายวัน' },
-    { order: 2, topic: 'เช็กระดับสารหล่อเย็นหม้อน้ำ', method: 'อยู่ระดับที่กำหนด', frequency: 'รายวัน' },
-    { order: 3, topic: 'ตรวจดูรอยรั่วซึมระบบเครื่องยนต์', method: 'ไม่มีการรั่วซึมของน้ำมัน', frequency: 'รายวัน' },
-    { order: 4, topic: 'เช็คระดับน้ำมันไฮดรอลิก', method: 'อยู่ระดับที่กำหนด', frequency: 'รายวัน' },
-    { order: 5, topic: 'เช็คกรองดักน้ำและDrain น้ำทิ้ง', method: 'อยู่ระดับที่กำหนด', frequency: 'รายวัน' },
-    { order: 6, topic: 'เช็ค/อัดจารบีตามจุดข้อต่อและจุดหมุนต่างๆ', method: 'อัดจารบีทุกจุด', frequency: 'รายวัน' },
-    { order: 7, topic: 'เช็คสภาพยางและแรงลมยาง', method: 'สภาพพร้อมใช้งาน', frequency: 'รายวัน' },
-    { order: 8, topic: 'เช็คความตึงโซ่แทร็คและโรลเลอร์ต่างๆ', method: 'ไม่สึกหรอ,ไม่ตึง-หย่อนเกินไป', frequency: 'รายวัน' },
-    { order: 9, topic: 'เช็คการรั่วซึมกระบอกไฮดรอลิกต่างๆ', method: 'ไม่มีการรั่วซึมของน้ำมัน', frequency: 'รายวัน' },
-    { order: 10, topic: 'เช็คการทำงานระบบไฟฟ้าและสัญญานไฟต่างๆ', method: 'ใช้งานได้ปกติ', frequency: 'รายวัน' },
-    { order: 11, topic: 'เช็คสภาพอุปกรณ์ เช่น ปุ้งกี้,เล็บขุด,ใบมีดฯลฯ', method: 'ใช้งานได้ปกติ', frequency: 'รายวัน' },
-    { order: 12, topic: 'เช็คสภาพตัวรถและอุปกรณ์เสริม เช่นกระบะตัวถังฯลฯ', method: 'ใช้งานได้ปกติ', frequency: 'รายวัน' },
-    { order: 13, topic: 'เช็คระดับสารละลายในแบตเตอรี่', method: 'อยู่ระดับที่กำหนด', frequency: 'รายสัปดาห์' },
-    { order: 14, topic: 'เช็คสภาพ/ความดึงสายพานต่างๆหน้าเครื่องยนต์', method: 'สภาพดี,ไม่ตึง-หย่อนเกินไป', frequency: 'รายสัปดาห์' },
-    { order: 15, topic: 'ทำความสะอาด/เป่าไส้กรองอากาศ', method: 'ไม่เสียรูป', frequency: 'รายสัปดาห์' },
-];
-
-const SIGNATURE_ROWS = [
-    {
-        order: "",
-        topic: 'ผู้ตรวจสอบ/พขร.',
-        method: 'ลงชื่อ',
-        frequency: 'รายวัน',
-        isSignature: true,
-        signatureRole: 'driver',
-    },
-    {
-        order: "",
-        topic: 'โฟร์แมนผู้ตรวจสอบ',
-        method: 'ลงชื่อ',
-        frequency: 'รายวัน',
-        isSignature: true,
-        signatureRole: 'foreman',
-    },
-];
-
-const CHECKLIST_TABLE_STYLES = `
-    .checklist-table-wrapper {
-        overflow-x: auto;
-        position: relative;
-    }
-
-    /* avoid collapsed borders interfering with sticky positioning */
-    .checklist-table {
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-
-    /* keep header visible during vertical scroll */
-    .checklist-table thead th {
-        position: sticky;
-        top: 0;
-        z-index: 10000;
-        background: var(--bg-panel, #fff);
-    }
-
-    /* Sticky left columns: tightened widths to reduce gaps */
-    .checklist-table th.col-order,
-    .checklist-table td.col-order {
-        position: sticky;
-        left: 0;
-        z-index: 10010;
-        background: var(--bg-panel, #fff);
-        width: 56px;
-        min-width: 40px;
-        max-width: 56px;
-        text-align: center;
-        box-shadow: 2px 0 8px rgba(12, 34, 56, 0.08);
-        transform: translateZ(0);
-        will-change: transform;
-    }
-
-    .checklist-table th.col-topic,
-    .checklist-table td.col-topic {
-        position: sticky;
-        left: 47px;
-        z-index: 10011;
-        background: var(--bg-panel, #fff);
-        width: 50px;
-        min-width: 47px;
-        text-align: left;
-        padding-left: 0.5rem;
-        box-shadow: 2px 0 8px rgba(12, 34, 56, 0.08);
-        transform: translateZ(0);
-        will-change: transform;
-    }
-
-    .checklist-table th.col-method,
-    .checklist-table td.col-method {
-        position: sticky;
-        left: 115px;
-        z-index: 10012;
-        background: var(--bg-panel, #fff);
-        width: 120px;
-        min-width: 65px;
-        text-align: left;
-        padding-left: 0.5rem;
-        box-shadow: 2px 0 8px rgba(12, 34, 56, 0.08);
-        transform: translateZ(0);
-        will-change: transform;
-    }
-
-    .checklist-table th.col-frequency,
-    .checklist-table td.col-frequency {
-        position: sticky;
-        left: 182px;
-        z-index: 10013;
-        background: var(--bg-panel, #fff);
-        width: 120px;
-        min-width: 40px;
-        text-align: center;
-        box-shadow: 2px 0 8px rgba(12, 34, 56, 0.08);
-        transform: translateZ(0);
-        will-change: transform;
-    }
-
-    /* avoid underlying cells showing through */
-    .checklist-table th,
-    .checklist-table td {
-        background-clip: padding-box;
-        background: var(--bg-panel, #fff);
-    }
-`;
-
-const defaultMetaForm = () => {
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10);
-    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    return {
-        machineCode: '',
-        department: '',
-        date,
-        period,
-    };
-};
-
-const formatUserName = (user = {}) => {
-    const primary = `${user.name ?? ''} ${user.lastname ?? ''}`.trim();
-    if (primary) {
-        return primary;
-    }
-    return user.displayName || user.Username || user.username || '';
-};
-
-const normalizeMachineRow = (row = {}) => {
-    const code = (row.Equipment || row.Machine_Id || '').toString().trim();
-    if (!code) {
-        return null;
-    }
-    const description = (row.Description || row.Name || '').trim();
-    const label = description ? `${code} · ${description}` : code;
-    return {
-        value: code,
-        label,
-        id: row.Machine_Id ? Number(row.Machine_Id) : null,
-        type: row.Machine_Type || row.Class || '-',
-        department: row.CenterName || row.Department || '',
-        description,
-    };
-};
-
-const mapSignatureValues = (values = {}) => {
-    const entries = Object.entries(values || {});
-    if (entries.length === 0) {
-        return {};
-    }
-    return entries.reduce((acc, [day, entry]) => {
-        if (typeof entry === 'string') {
-            acc[day] = entry;
-        } else if (entry && typeof entry === 'object' && 'signature' in entry) {
-            acc[day] = entry.signature || '';
-        } else {
-            acc[day] = '';
-        }
-        return acc;
-    }, {});
-};
-
-const resolveSignatureDisplay = (value, options) => {
-    if (!value) {
-        return '';
-    }
-    const match = options.find((option) => option.value === value);
-    return match ? match.label : value;
-};
-
-const normalizeChecklistMatrix = (matrix = {}) => {
-    const normalized = {};
-    Object.entries(matrix || {}).forEach(([day, items]) => {
-        const dayKey = String(day);
-        normalized[dayKey] = {};
-        Object.entries(items || {}).forEach(([order, value]) => {
-            normalized[dayKey][Number(order)] = value || '';
-        });
-    });
-    return normalized;
-};
-
-const buildChecklistLocks = (matrix = {}) => {
-    const locks = new Set();
-    Object.entries(matrix || {}).forEach(([day, items]) => {
-        Object.entries(items || {}).forEach(([order, value]) => {
-            if (value) {
-                locks.add(`${day}:${order}`);
-            }
-        });
-    });
-    return locks;
-};
+import {
+    DAY_COLUMNS,
+    STATUS_OPTIONS,
+    LEGEND,
+    CHECKLIST_ITEMS,
+    SIGNATURE_ROWS,
+    CHECKLIST_TABLE_STYLES,
+    BASE_DEPARTMENT_OPTIONS,
+    defaultMetaForm,
+    normalizeMachineRow,
+    formatUserName,
+    mapSignatureValues,
+    resolveSignatureDisplay,
+    normalizeChecklistMatrix,
+    buildChecklistLocks,
+} from './checklistShared.js';
 
 export default function Checklist() {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
-    const normalizedRoles = useMemo(() => {
-        const rolesSource = Array.isArray(user?.roles) && user.roles.length
-            ? user.roles
-            : (user?.role ? [user.role] : []);
-        return rolesSource
-            .map((value) => (typeof value === 'string' ? value.toLowerCase() : ''))
-            .filter(Boolean);
-    }, [user]);
-    const hasRole = (value) => normalizedRoles.includes(value);
-    const isForeman = hasRole('foreman');
-    const isAdmin = hasRole('admin');
-    const isDriver = hasRole('driver');
-    const isOperator = hasRole('operator');
-    const isReadOnlyViewer = isAdmin && !isForeman && !isOperator;
-    const isOnlyView = isOperator && !isForeman && !isAdmin;
-    const canAccessChecklist = isForeman || isAdmin || isDriver || isOperator;
+    const pickerRef = useRef(null);
+    const periodInputRef = useRef(null);
 
     const [metaForm, setMetaForm] = useState(() => defaultMetaForm());
     const [machines, setMachines] = useState([]);
     const [machineLoading, setMachineLoading] = useState(false);
     const [machineError, setMachineError] = useState('');
     const [vehicleType, setVehicleType] = useState('-');
-    const [status, setStatus] = useState('idle');
     const [showOptions, setShowOptions] = useState(false);
     const [highlightIndex, setHighlightIndex] = useState(0);
-    const [selectedMachineId, setSelectedMachineId] = useState(null);
+
     const [checklistLoading, setChecklistLoading] = useState(false);
     const [checklistError, setChecklistError] = useState('');
+    const [issueNotes, setIssueNotes] = useState('');
+    const [selectedMachineId, setSelectedMachineId] = useState(null);
+    const [status, setStatus] = useState('idle');
+
     const [foremanSignatures, setForemanSignatures] = useState({});
-    const [driverSignatures, setDriverSignatures] = useState({});
     const [foremanLockedDays, setForemanLockedDays] = useState(() => new Set());
-    const [driverLockedDays, setDriverLockedDays] = useState(() => new Set());
     const [pendingForemanDays, setPendingForemanDays] = useState(() => new Set());
+
+    const [driverSignatures, setDriverSignatures] = useState({});
+    const [driverLockedDays, setDriverLockedDays] = useState(() => new Set());
     const [pendingDriverSignatureDays, setPendingDriverSignatureDays] = useState(() => new Set());
+
     const [checklistValues, setChecklistValues] = useState({});
     const [lockedChecklistCells, setLockedChecklistCells] = useState(() => new Set());
     const [pendingChecklistCells, setPendingChecklistCells] = useState(() => new Set());
-    const [issueNotes, setIssueNotes] = useState('');
-    const pickerRef = useRef(null);
-    const dateInputRef = useRef(null);
-    const periodInputRef = useRef(null);
-    const isMetaComplete = Boolean(metaForm.machineCode.trim() && metaForm.department.trim() && metaForm.date);
+
+    const normalizedRoles = useMemo(() => {
+        const source = Array.isArray(user?.roles) && user.roles.length
+            ? user.roles
+            : (user?.role ? [user.role] : []);
+        return source
+            .map((role) => (typeof role === 'string' ? role.trim().toLowerCase() : ''))
+            .filter(Boolean);
+    }, [user]);
+    const hasRole = (role) => normalizedRoles.includes(role);
+    const isDriver = hasRole('driver');
+    const isForeman = hasRole('foreman');
+    const isAdmin = hasRole('admin');
+    const isOperator = hasRole('operator');
+    const canAccessChecklist = Boolean(user) && (isDriver || isForeman || isOperator || isAdmin);
+    const isOnlyView = !isDriver && !isForeman && !isAdmin && isOperator;
+
+    const trimmedMachineCode = metaForm.machineCode.trim();
+    const trimmedDepartment = metaForm.department.trim();
+    const isMetaComplete = Boolean(trimmedMachineCode && trimmedDepartment && metaForm.period);
+    const shouldShowChecklistTable = isMetaComplete;
+
+    const machineOptions = useMemo(() => machines, [machines]);
+    const filteredMachineOptions = useMemo(() => {
+        const query = metaForm.machineCode.trim().toLowerCase();
+        if (!query) {
+            return machineOptions;
+        }
+        return machineOptions.filter((option) => {
+            const value = option.value.toLowerCase();
+            const label = option.label.toLowerCase();
+            return value.includes(query) || label.includes(query);
+        });
+    }, [machineOptions, metaForm.machineCode]);
+
+    const departmentOptions = useMemo(() => {
+        const labels = new Map();
+        BASE_DEPARTMENT_OPTIONS.forEach((label) => {
+            const trimmed = label.trim();
+            if (trimmed) {
+                labels.set(trimmed, trimmed);
+            }
+        });
+        machines.forEach((machine) => {
+            const label = (machine.department || '').trim();
+            if (label) {
+                labels.set(label, label);
+            }
+        });
+        if (trimmedDepartment) {
+            labels.set(trimmedDepartment, trimmedDepartment);
+        }
+        return Array.from(labels.values()).map((label) => ({ value: label, label }));
+    }, [machines, trimmedDepartment]);
+
+    const createDaySet = useCallback(
+        (values) => new Set((Array.isArray(values) ? values : []).map((value) => Number(value))),
+        [],
+    );
+
+    const clearForemanState = useCallback(() => {
+        setForemanSignatures({});
+        setForemanLockedDays(new Set());
+        setPendingForemanDays(new Set());
+    }, []);
+
+    const clearDriverState = useCallback(() => {
+        setDriverSignatures({});
+        setDriverLockedDays(new Set());
+        setPendingDriverSignatureDays(new Set());
+        setChecklistValues({});
+        setLockedChecklistCells(new Set());
+        setPendingChecklistCells(new Set());
+    }, []);
 
     useEffect(() => {
         let ignore = false;
@@ -289,12 +137,8 @@ export default function Checklist() {
                 }
                 const normalized = (data.items || [])
                     .map((item) => normalizeMachineRow(item))
-                    .filter(Boolean);
-                normalized.sort((a, b) => {
-                    if (a.value < b.value) return -1;
-                    if (a.value > b.value) return 1;
-                    return 0;
-                });
+                    .filter(Boolean)
+                    .sort((a, b) => a.value.localeCompare(b.value));
                 setMachines(normalized);
             } catch (error) {
                 if (!ignore) {
@@ -324,24 +168,96 @@ export default function Checklist() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const machineOptions = useMemo(() => machines, [machines]);
-    const filteredMachineOptions = useMemo(() => {
-        const query = metaForm.machineCode.trim().toLowerCase();
-        if (!query) {
-            return machineOptions;
-        }
-        return machineOptions.filter((option) => {
-            const value = option.value.toLowerCase();
-            const label = option.label.toLowerCase();
-            return value.includes(query) || label.includes(query);
-        });
-    }, [machineOptions, metaForm.machineCode]);
-
     useEffect(() => {
         if (highlightIndex >= filteredMachineOptions.length) {
             setHighlightIndex(0);
         }
     }, [filteredMachineOptions.length, highlightIndex]);
+
+    useEffect(() => {
+        if (!trimmedMachineCode || !metaForm.period || !trimmedDepartment) {
+            clearDriverState();
+            clearForemanState();
+            setSelectedMachineId(null);
+            if (!trimmedMachineCode) {
+                setVehicleType('-');
+            }
+            setIssueNotes('');
+            setChecklistError('');
+            setStatus('idle');
+            return;
+        }
+
+        let ignore = false;
+        setChecklistLoading(true);
+        setChecklistError('');
+        const params = new URLSearchParams({
+            machine: trimmedMachineCode,
+            period: metaForm.period,
+            department: trimmedDepartment,
+        });
+
+        (async () => {
+            try {
+                const data = await apiGet(`/api/checklist.php?${params.toString()}`);
+                if (ignore) {
+                    return;
+                }
+                setSelectedMachineId(data.machine?.id ?? null);
+                if (data.machine?.description) {
+                    setVehicleType(data.machine.description);
+                }
+                if (data.meta) {
+                    setMetaForm((prev) => ({
+                        ...prev,
+                        department: data.meta.department || prev.department,
+                    }));
+                    setIssueNotes(data.meta.issueNotes || '');
+                } else {
+                    setIssueNotes('');
+                }
+                setDriverSignatures(mapSignatureValues(data.driver?.values));
+                setDriverLockedDays(createDaySet(data.driver?.lockedDays));
+                setPendingDriverSignatureDays(new Set());
+                setForemanSignatures(mapSignatureValues(data.foreman?.values));
+                setForemanLockedDays(createDaySet(data.foreman?.lockedDays));
+                setPendingForemanDays(new Set());
+                const normalizedItems = normalizeChecklistMatrix(data.items?.values);
+                setChecklistValues(normalizedItems);
+                setLockedChecklistCells(buildChecklistLocks(normalizedItems));
+                setPendingChecklistCells(new Set());
+            } catch (error) {
+                if (!ignore) {
+                    if (error?.status === 401) {
+                        logout('session-expired');
+                    } else {
+                        setChecklistError(error?.message || 'ไม่สามารถโหลดข้อมูลลายเซ็นได้');
+                        clearDriverState();
+                        clearForemanState();
+                        setSelectedMachineId(null);
+                        setVehicleType('-');
+                        setIssueNotes('');
+                    }
+                }
+            } finally {
+                if (!ignore) {
+                    setChecklistLoading(false);
+                }
+            }
+        })();
+
+        return () => {
+            ignore = true;
+        };
+    }, [
+        logout,
+        trimmedMachineCode,
+        metaForm.period,
+        trimmedDepartment,
+        clearDriverState,
+        clearForemanState,
+        createDaySet,
+    ]);
 
     const handleSelectMachine = (code) => {
         const chosen = machineOptions.find((option) => option.value === code);
@@ -367,21 +283,6 @@ export default function Checklist() {
         setMetaForm((prev) => ({ ...prev, [field]: value }));
     };
 
-    const openDatePicker = () => {
-        try {
-            if (dateInputRef.current && typeof dateInputRef.current.showPicker === 'function') {
-                dateInputRef.current.showPicker();
-                return;
-            }
-            if (dateInputRef.current) {
-                dateInputRef.current.focus();
-                dateInputRef.current.click();
-            }
-        } catch (error) {
-            console.debug('openDatePicker failed', error);
-        }
-    };
-
     const openPeriodPicker = () => {
         try {
             if (periodInputRef.current && typeof periodInputRef.current.showPicker === 'function') {
@@ -396,83 +297,6 @@ export default function Checklist() {
             console.debug('openPeriodPicker failed', error);
         }
     };
-
-    const clearForemanState = () => {
-        setForemanSignatures({});
-        setForemanLockedDays(new Set());
-        setPendingForemanDays(new Set());
-    };
-
-    const clearDriverState = () => {
-        setDriverSignatures({});
-        setDriverLockedDays(new Set());
-        setPendingDriverSignatureDays(new Set());
-        setChecklistValues({});
-        setLockedChecklistCells(new Set());
-        setPendingChecklistCells(new Set());
-    };
-
-    useEffect(() => {
-        const trimmedCode = metaForm.machineCode.trim();
-        if (!trimmedCode || !metaForm.period) {
-            clearDriverState();
-            clearForemanState();
-            setSelectedMachineId(null);
-            if (!trimmedCode) {
-                setVehicleType('-');
-            }
-            return;
-        }
-
-        let ignore = false;
-        setChecklistLoading(true);
-        setChecklistError('');
-        const params = new URLSearchParams({
-            machine: trimmedCode,
-            period: metaForm.period,
-        });
-
-        (async () => {
-            try {
-                const data = await apiGet(`/api/checklist.php?${params.toString()}`);
-                if (ignore) {
-                    return;
-                }
-                setSelectedMachineId(data.machine?.id ?? null);
-                if (data.machine?.description) {
-                    setVehicleType(data.machine.description);
-                }
-                setDriverSignatures(mapSignatureValues(data.driver?.values));
-                setDriverLockedDays(new Set(data.driver?.lockedDays || []));
-                setPendingDriverSignatureDays(new Set());
-                setForemanSignatures(mapSignatureValues(data.foreman?.values));
-                setForemanLockedDays(new Set(data.foreman?.lockedDays || []));
-                setPendingForemanDays(new Set());
-                const normalizedItems = normalizeChecklistMatrix(data.items?.values);
-                setChecklistValues(normalizedItems);
-                setLockedChecklistCells(buildChecklistLocks(normalizedItems));
-                setPendingChecklistCells(new Set());
-            } catch (error) {
-                if (!ignore) {
-                    if (error?.status === 401) {
-                        logout('session-expired');
-                    } else {
-                        setChecklistError(error?.message || 'ไม่สามารถโหลดข้อมูลลายเซ็นได้');
-                        clearDriverState();
-                        clearForemanState();
-                    }
-                }
-            } finally {
-                if (!ignore) {
-                    setChecklistLoading(false);
-                }
-            }
-        })();
-
-        return () => {
-            ignore = true;
-        };
-    }, [logout, metaForm.machineCode, metaForm.period]);
 
     const foremanOptions = useMemo(() => {
         if (!isForeman || !user) {
@@ -573,7 +397,7 @@ export default function Checklist() {
         if (item.signatureRole === 'driver') {
             const driverValue = driverSignatures[dayKey] ?? '';
             const driverLocked = driverLockedDays.has(day);
-            if (driverLocked || isForeman || isReadOnlyViewer || isOnlyView) {
+            if (driverLocked || isForeman || isOnlyView) {
                 const displayValue = resolveSignatureDisplay(driverValue, driverOptions);
                 return (
                     <input
@@ -589,7 +413,7 @@ export default function Checklist() {
                 <select
                     className="signature-grid-input"
                     value={driverValue}
-                    disabled={!isMetaComplete || checklistLoading || driverOptions.length === 0 || isReadOnlyViewer || isOnlyView}
+                    disabled={!isMetaComplete || checklistLoading || driverOptions.length === 0 || isOnlyView}
                     onChange={(event) => {
                         const nextValue = event.target.value;
                         setDriverSignatures((prev) => ({ ...prev, [dayKey]: nextValue }));
@@ -611,9 +435,6 @@ export default function Checklist() {
     };
 
     const handleStatusChange = (day, order, nextValue) => {
-        if (isReadOnlyViewer) {
-            return;
-        }
         const dayKey = String(day);
         const key = `${dayKey}:${order}`;
         if (lockedChecklistCells.has(key)) {
@@ -633,12 +454,7 @@ export default function Checklist() {
 
     const handleSave = async () => {
         if (!isMetaComplete || !metaForm.period) {
-            alert('กรุณากรอกชื่อหน่วยงาน รหัสเครื่องจักร วัน และเดือน/ปี');
-            return;
-        }
-
-        if (isReadOnlyViewer) {
-            alert('คุณไม่มีสิทธิ์บันทึกแบบฟอร์มนี้');
+            alert('กรุณากรอกชื่อหน่วยงาน รหัสเครื่องจักร และเดือน/ปี ให้ครบ');
             return;
         }
 
@@ -652,6 +468,7 @@ export default function Checklist() {
                 machineCode: metaForm.machineCode,
                 period: metaForm.period,
                 signatureType: 'driver',
+                department: trimmedDepartment,
             };
 
             let pendingSignatureDays = [];
@@ -735,7 +552,7 @@ export default function Checklist() {
                     setPendingChecklistCells(new Set());
                 }
                 setStatus('saved');
-                window.setTimeout(() => setStatus('idle'), 1500);
+                setTimeout(() => setStatus('idle'), 1500);
             } catch (error) {
                 setStatus('idle');
                 if (error?.status === 401) {
@@ -763,6 +580,7 @@ export default function Checklist() {
             period: metaForm.period,
             signatures: signaturesPayload,
             signatureType: 'foreman',
+            department: trimmedDepartment,
         };
         if (selectedMachineId) {
             payload.machineId = selectedMachineId;
@@ -779,7 +597,7 @@ export default function Checklist() {
             });
             setPendingForemanDays(new Set());
             setStatus('saved');
-            window.setTimeout(() => setStatus('idle'), 1500);
+            setTimeout(() => setStatus('idle'), 1500);
         } catch (error) {
             setStatus('idle');
             if (error?.status === 401) {
@@ -790,25 +608,13 @@ export default function Checklist() {
         }
     };
 
-    const isSaveDisabled = isReadOnlyViewer
-        ? true
-        : isForeman
-            ? (!isMetaComplete || !metaForm.period || !hasPendingForemanSignatures || status === 'saving' || checklistLoading)
-            : (!isMetaComplete
-                || !metaForm.period
-                || (!hasPendingDriverSignatures && !hasPendingDriverStatuses)
-                || status === 'saving'
-                || checklistLoading);
-
-    // Operators in OnlyView mode cannot save
-    if (isOnlyView) {
-        // always disable save for only-view operators
-        // keep existing disabled state for buttons
-        // override to true
-        // This ensures Save button is non-interactive for operator-only view.
-        // eslint-disable-next-line no-unused-vars
-        const _forceDisable = true;
-    }
+    const isSaveDisabled = isForeman
+        ? (!isMetaComplete || !metaForm.period || !hasPendingForemanSignatures || status === 'saving' || checklistLoading)
+        : (!isMetaComplete
+            || !metaForm.period
+            || (!hasPendingDriverSignatures && !hasPendingDriverStatuses)
+            || status === 'saving'
+            || checklistLoading);
 
     if (!canAccessChecklist) {
         return (
@@ -826,7 +632,6 @@ export default function Checklist() {
         );
     }
 
-    // If operator-only view, show a small info banner
     const onlyViewBanner = isOnlyView ? (
         <div style={{ margin: '0.5rem 0', padding: '0.5rem 0.75rem', background: '#f6f8fa', borderRadius: 6 }}>
             <strong>เฉพาะการดู</strong>
@@ -834,257 +639,264 @@ export default function Checklist() {
         </div>
     ) : null;
 
-    return (
-        <div className="checklist-page">
-            <style>{CHECKLIST_TABLE_STYLES}</style>
-            <section className="checklist-cover">
-                <div>
-                    <p className="checklist-company">บริษัท ซีวิลเอนจิเนียริง จำกัด (มหาชน) และกลุ่มบริษัทในเครือ</p>
-                    <h1>การบำรุงรักษาประจำวัน</h1>
-                    <p>Daily Preventive Maintenance</p>
-                </div>
-                <div className="checklist-meta-grid">
-                    <label className="meta-field meta-field--picker" htmlFor="machineCode">
-                        <span className="meta-label">รหัสเครื่อง</span>
-                        <div className="machine-picker" ref={pickerRef}>
-                            <input
-                                id="machineCode"
-                                type="text"
-                                className="machine-input"
-                                placeholder={machineLoading ? 'กำลังโหลดรายการ...' : 'พิมพ์หรือเลือกจากรายการ'}
-                                value={metaForm.machineCode}
-                                disabled={machineLoading}
-                                onChange={(event) => {
-                                    handleMetaChange('machineCode')(event);
-                                    setShowOptions(true);
-                                    setHighlightIndex(0);
-                                }}
-                                onFocus={() => setShowOptions(true)}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'ArrowDown') {
-                                        event.preventDefault();
-                                        setShowOptions(true);
-                                        setHighlightIndex((prev) =>
-                                            Math.min(prev + 1, Math.max(filteredMachineOptions.length - 1, 0)),
-                                        );
-                                    } else if (event.key === 'ArrowUp') {
-                                        event.preventDefault();
-                                        setHighlightIndex((prev) => Math.max(prev - 1, 0));
-                                    } else if (event.key === 'Enter') {
-                                        if (showOptions && filteredMachineOptions[highlightIndex]) {
-                                            event.preventDefault();
-                                            handleSelectMachine(filteredMachineOptions[highlightIndex].value);
-                                        }
-                                    } else if (event.key === 'Escape') {
-                                        setShowOptions(false);
-                                    }
-                                }}
-                                role="combobox"
-                                aria-expanded={showOptions}
-                                aria-controls="checklist-machine-options"
-                                aria-autocomplete="list"
-                            />
-                            {showOptions && filteredMachineOptions.length > 0 && (
-                                <ul className="picker-options" id="checklist-machine-options" role="listbox">
-                                    {filteredMachineOptions.map((option, index) => (
-                                        <li key={option.value}>
-                                            <button
-                                                type="button"
-                                                className={`picker-option${index === highlightIndex ? ' active' : ''}`}
-                                                onMouseDown={(event) => {
-                                                    event.preventDefault();
-                                                    handleSelectMachine(option.value);
-                                                }}
-                                                role="option"
-                                                aria-selected={index === highlightIndex}
-                                            >
-                                                <strong>{option.value}</strong>
-                                                <span>{option.label.replace(option.value, '').replace(/^\s*·\s*/, '')}</span>
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                        {machineError && <p className="field-error">{machineError}</p>}
-                    </label>
-                    <label className="meta-field" htmlFor="machineType">
-                        <span className="meta-label">รุ่น/ยี่ห้อ</span>
-                        <input id="machineType" type="text" value={vehicleType} readOnly placeholder="-" />
-                    </label>
-                    <label className="meta-field" htmlFor="department">
-                        <span className="meta-label">หน่วยงาน</span>
-                        <input
-                            id="department"
-                            type="text"
-                            placeholder="ชื่อหน่วยงาน"
-                            value={metaForm.department}
-                            onChange={handleMetaChange('department')}
-                        />
-                    </label>
-                    <label
-                        className="meta-field"
-                        htmlFor="date"
-                        onClick={(event) => {
-                            if (event.target.id !== 'date') {
-                                openDatePicker();
-                            }
-                        }}
-                    >
-                        <span className="meta-label">วันที่บังคับใช้(ไม่มีผลกับแบบฟอร์ม)</span>
-                        <input
-                            id="date"
-                            type="date"
-                            value={metaForm.date}
-                            onClick={openDatePicker}
-                            onFocus={openDatePicker}
-                            onChange={handleMetaChange('date')}
-                            ref={dateInputRef}
-                        />
-                    </label>
-                    <label className="meta-field" htmlFor="period-input">
-                        <span className="meta-label">ประจำเดือน / ปี</span>
-                        <input
-                            id="period-input"
-                            type="month"
-                            value={metaForm.period}
-                            ref={periodInputRef}
-                            onFocus={openPeriodPicker}
-                            onClick={openPeriodPicker}
-                            onChange={handleMetaChange('period')}
-                        />
-                    </label>
-                </div>
-            </section>
+    const renderChecklistBody = () => (
+        <>
+            {onlyViewBanner}
 
             {checklistError && (
                 <p style={{ color: '#c0392b', fontWeight: 600, marginTop: '0.75rem' }}>{checklistError}</p>
             )}
-            {!isMetaComplete && (
+            {!isAdmin && !isMetaComplete && (
                 <p style={{ color: '#c0392b', fontWeight: 600, marginTop: '0.5rem' }}>
-                    กรุณากรอก "ชื่อหน่วยงาน" และ "รหัสเครื่อง" ให้ครบก่อนเริ่มบันทึกผลการตรวจ
+                    กรุณาเลือก "ชื่อหน่วยงาน" และ "รหัสเครื่อง" ให้ครบก่อนเริ่มบันทึกผลการตรวจ
                 </p>
             )}
 
-            <section className="checklist-table-wrapper">
-                <table className="checklist-table">
-                    <thead>
-                        <tr>
-                            <th rowSpan="2" className="col-order">
-                                ลำดับ
-                            </th>
-                            <th rowSpan="2" className="col-topic">
-                                รายการตรวจสอบ
-                            </th>
-                            <th rowSpan="2" className="col-method">
-                                มาตรฐานการตรวจสอบ
-                            </th>
-                            <th rowSpan="2" className="col-frequency">
-                                ความถี่
-                            </th>
-                        </tr>
-                        <tr>
-                            {DAY_COLUMNS.map((day) => (
-                                <th key={`day-${day}`}>{day}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {[...CHECKLIST_ITEMS, ...SIGNATURE_ROWS].map((item) => (
-                            <tr key={item.order} className={`checklist-row${item.isSignature ? ' signature-row' : ''}`}>
-                                <td className="col-order">{item.order}</td>
-                                <td className="col-topic">{item.topic}</td>
-                                <td className="col-method">{item.method}</td>
-                                <td className="col-frequency">{item.frequency}</td>
-                                {DAY_COLUMNS.map((day) => (
-                                    <td key={`${item.order}-${day}`}>
-                                        {item.isSignature ? (
-                                            renderSignatureInput(item, day)
-                                        ) : (
-                                            <select
-                                                className="status-select"
-                                                value={checklistValues[String(day)]?.[item.order] ?? ''}
-                                                aria-label={`เลือกสถานะ ข้อ ${item.order} วันที่ ${day}`}
-                                                disabled={!isMetaComplete || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isReadOnlyViewer || isOnlyView}
-                                                onChange={(event) => handleStatusChange(day, item.order, event.target.value)}
-                                            >
-                                                {STATUS_OPTIONS.map((option) => (
-                                                    <option key={`${item.order}-${day}-${option.value || 'blank'}`} value={option.value}>
-                                                        {option.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        )}
-                                    </td>
+            {shouldShowChecklistTable ? (
+                <>
+                    <section id="checklist-table-section" className="checklist-table-wrapper">
+                        <table className="checklist-table">
+                            <thead>
+                                <tr>
+                                    <th rowSpan="2" className="col-order">
+                                        ลำดับ
+                                    </th>
+                                    <th rowSpan="2" className="col-topic">
+                                        รายการตรวจสอบ
+                                    </th>
+                                    <th rowSpan="2" className="col-method">
+                                        มาตรฐานการตรวจสอบ
+                                    </th>
+                                    <th rowSpan="2" className="col-frequency">
+                                        ความถี่
+                                    </th>
+                                </tr>
+                                <tr>
+                                    {DAY_COLUMNS.map((day) => (
+                                        <th key={`day-${day}`}>{day}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {[...CHECKLIST_ITEMS, ...SIGNATURE_ROWS].map((item) => (
+                                    <tr key={item.order || item.topic} className={`checklist-row${item.isSignature ? ' signature-row' : ''}`}>
+                                        <td className="col-order">{item.order}</td>
+                                        <td className="col-topic">{item.topic}</td>
+                                        <td className="col-method">{item.method}</td>
+                                        <td className="col-frequency">{item.frequency}</td>
+                                        {DAY_COLUMNS.map((day) => (
+                                            <td key={`${item.order}-${day}`}>
+                                                {item.isSignature ? (
+                                                    renderSignatureInput(item, day)
+                                                ) : (
+                                                    <select
+                                                        className="status-select"
+                                                        value={checklistValues[String(day)]?.[item.order] ?? ''}
+                                                        aria-label={`เลือกสถานะ ข้อ ${item.order} วันที่ ${day}`}
+                                                        disabled={!isMetaComplete || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isOnlyView}
+                                                        onChange={(event) => handleStatusChange(day, item.order, event.target.value)}
+                                                    >
+                                                        {STATUS_OPTIONS.map((option) => (
+                                                            <option key={`${item.order}-${day}-${option.value || 'blank'}`} value={option.value}>
+                                                                {option.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </td>
+                                        ))}
+                                    </tr>
                                 ))}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </section>
+                            </tbody>
+                        </table>
+                    </section>
 
-            <section className="checklist-footer">
-                <div className="legend">
-                    {LEGEND.map((item) => (
-                        <div key={item.symbol} className="legend-item">
-                            <span className="legend-symbol">{item.symbol}</span>
-                            <span>{item.label}</span>
+                    <section className="checklist-footer">
+                        <div className="legend">
+                            {LEGEND.map((item) => (
+                                <div key={item.symbol} className="legend-item">
+                                    <span className="legend-symbol">{item.symbol}</span>
+                                    <span>{item.label}</span>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
-            </section>
+                    </section>
 
-            <section className="issue-panel">
-                <div className="issue-panel__header">
-                    <h3>ปัญหาที่ตรวจพบ (ถ้ามี)</h3>
-                </div>
-                <label className="issue-panel__field" htmlFor="issue-notes">
-                    <span>รายละเอียด</span>
-                    <textarea
-                        id="issue-notes"
-                        rows="4"
-                        placeholder="กรอกรายละเอียดปัญหาที่พบระหว่างการตรวจเช็ก"
-                        value={issueNotes}
-                        onChange={(event) => setIssueNotes(event.target.value)}
-                    />
-                </label>
-            </section>
-
-            <section className="checklist-actions">
-                <button
-                    type="button"
-                    className="button ghost"
-                    onClick={() => navigate(isReadOnlyViewer ? '/admin' : '/worksite')}
-                >
-                    ย้อนกลับ
-                </button>
-                <button type="button" className="button primary" disabled={isSaveDisabled || isOnlyView} onClick={handleSave}>
-                    {isForeman ? 'บันทึกลายเซ็นโฟร์แมน' : 'บันทึกข้อมูลพขร.'}
-                </button>
-                {status === 'saving' && <span className="text-muted">กำลังบันทึก...</span>}
-                {status === 'saved' && <span className="text-success">บันทึกแล้ว</span>}
-            </section>
-
-            {status === 'saved' && (
-                <div className="dialog-overlay" role="dialog" aria-modal="true">
-                    <div className="dialog-card checklist-dialog">
-                        <h3>บันทึกสำเร็จ</h3>
-                        <p>ระบบเก็บบันทึกแบบฟอร์มเรียบร้อยแล้ว</p>
-                        <div className="dialog-actions">
-                            <button
-                                type="button"
-                                className="button primary"
-                                onClick={() => {
-                                    setStatus('idle');
-                                    navigate('/worksite');
-                                }}
-                            >
-                                กลับหน้าหลัก
-                            </button>
+                    <section className="issue-panel">
+                        <div className="issue-panel__header">
+                            <h3>ปัญหาที่ตรวจพบ (ถ้ามี)</h3>
                         </div>
-                    </div>
-                </div>
+                        <label className="issue-panel__field" htmlFor="issue-notes">
+                            <span>รายละเอียด</span>
+                            <textarea
+                                id="issue-notes"
+                                rows="4"
+                                placeholder="กรอกรายละเอียดปัญหาที่พบระหว่างการตรวจเช็ก"
+                                value={issueNotes}
+                                onChange={(event) => setIssueNotes(event.target.value)}
+                            />
+                        </label>
+                    </section>
+
+                    {!isAdmin && (
+                        <>
+                            <section className="checklist-actions">
+                                <button type="button" className="button primary" disabled={isSaveDisabled || isOnlyView} onClick={handleSave}>
+                                    {isForeman ? 'บันทึกลายเซ็นโฟร์แมน' : 'บันทึกข้อมูลพขร.'}
+                                </button>
+                                {status === 'saving' && <span className="text-muted">กำลังบันทึก...</span>}
+                                {status === 'saved' && <span className="text-success">บันทึกแล้ว</span>}
+                            </section>
+
+                            {status === 'saved' && (
+                                <div className="dialog-overlay" role="dialog" aria-modal="true">
+                                    <div className="dialog-card checklist-dialog">
+                                        <h3>บันทึกสำเร็จ</h3>
+                                        <p>ระบบเก็บบันทึกแบบฟอร์มเรียบร้อยแล้ว</p>
+                                        <div className="dialog-actions">
+                                            <button
+                                                type="button"
+                                                className="button primary"
+                                                onClick={() => {
+                                                    setStatus('idle');
+                                                    navigate('/worksite');
+                                                }}
+                                            >
+                                                กลับหน้าหลัก
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </>
+            ) : (
+                isAdmin && (
+                    <section className="admin-empty-state">
+                        <h3>ยังไม่มีผลการค้นหา</h3>
+                        <p>กรุณาเลือกเดือน รหัสรถ และสถานที่ แล้วกด "ค้นหาแบบฟอร์ม" เพื่อดูรายละเอียดการตรวจเช็ก</p>
+                    </section>
+                )
             )}
+        </>
+    );
+
+    return (
+        <div className="checklist-page">
+            <style>{CHECKLIST_TABLE_STYLES}</style>
+            <div className="page-banner-wrapper">
+                <section className="checklist-cover page-banner page-banner--user">
+                    <div className="page-banner__content">
+                        <button type="button" className="brand-back" style={{margin:'4px'}} onClick={() => navigate('/worksite')}>
+                            กลับหน้าหลัก
+                        </button>
+                        <br></br>
+                        <span className="brand-label" style={{color: '#0b2644'}}> Daily Form </span>
+                        <p className="checklist-company brand-babel" >บริษัท ซีวิลเอนจิเนียริง จำกัด (มหาชน) และกลุ่มบริษัทในเครือ</p>
+                        <h1 className="brand-babel" fontcolor="white" >การบำรุงรักษาประจำวัน</h1>
+                        <p className="brand-babel__subtitle" style={{color:'#0b2644'}}>Daily Preventive Maintenance</p>
+                    </div>
+                    <div className="checklist-meta-grid page-banner__meta">
+                        <label className="meta-field meta-field--picker" htmlFor="machineCode">
+                            <span className="meta-label">รหัสเครื่อง</span>
+                            <div className="machine-picker" ref={pickerRef}>
+                                <input
+                                    id="machineCode"
+                                    type="text"
+                                    className="machine-input"
+                                    placeholder={machineLoading ? 'กำลังโหลดรายการ...' : 'พิมพ์หรือเลือกจากรายการ'}
+                                    value={metaForm.machineCode}
+                                    disabled={machineLoading}
+                                    onChange={(event) => {
+                                        handleMetaChange('machineCode')(event);
+                                        setShowOptions(true);
+                                        setHighlightIndex(0);
+                                    }}
+                                    onFocus={() => setShowOptions(true)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'ArrowDown') {
+                                            event.preventDefault();
+                                            setShowOptions(true);
+                                            setHighlightIndex((prev) =>
+                                                Math.min(prev + 1, Math.max(filteredMachineOptions.length - 1, 0)),
+                                            );
+                                        } else if (event.key === 'ArrowUp') {
+                                            event.preventDefault();
+                                            setHighlightIndex((prev) => Math.max(prev - 1, 0));
+                                        } else if (event.key === 'Enter') {
+                                            if (showOptions && filteredMachineOptions[highlightIndex]) {
+                                                event.preventDefault();
+                                                handleSelectMachine(filteredMachineOptions[highlightIndex].value);
+                                            }
+                                        } else if (event.key === 'Escape') {
+                                            setShowOptions(false);
+                                        }
+                                    }}
+                                    role="combobox"
+                                    aria-expanded={showOptions}
+                                    aria-controls="checklist-machine-options"
+                                    aria-autocomplete="list"
+                                />
+                                {showOptions && filteredMachineOptions.length > 0 && (
+                                    <ul className="picker-options" id="checklist-machine-options" role="listbox">
+                                        {filteredMachineOptions.map((option, index) => (
+                                            <li key={option.value}>
+                                                <button
+                                                    type="button"
+                                                    className={`picker-option${index === highlightIndex ? ' active' : ''}`}
+                                                    onMouseDown={(event) => {
+                                                        event.preventDefault();
+                                                        handleSelectMachine(option.value);
+                                                    }}
+                                                    role="option"
+                                                    aria-selected={index === highlightIndex}
+                                                >
+                                                    <strong>{option.value}</strong>
+                                                    <span>{option.label.replace(option.value, '').replace(/^\s*·\s*/, '')}</span>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                            {machineError && <p className="field-error">{machineError}</p>}
+                        </label>
+                        <label className="meta-field" htmlFor="machineType">
+                            <span className="meta-label">รุ่น/ยี่ห้อ</span>
+                            <input id="machineType" type="text" value={vehicleType} readOnly placeholder="-" />
+                        </label>
+                        <label className="meta-field" htmlFor="department">
+                            <span className="meta-label">หน่วยงาน</span>
+                            <select
+                                id="department"
+                                value={metaForm.department}
+                                onChange={handleMetaChange('department')}
+                            >
+                                <option value="">เลือกหน่วยงาน</option>
+                                {departmentOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="meta-field" htmlFor="period-input">
+                            <span className="meta-label">ประจำเดือน / ปี</span>
+                            <input
+                                id="period-input"
+                                type="month"
+                                value={metaForm.period}
+                                ref={periodInputRef}
+                                onFocus={openPeriodPicker}
+                                onClick={openPeriodPicker}
+                                onChange={handleMetaChange('period')}
+                            />
+                        </label>
+                    </div>
+                </section>
+            </div>
+            {renderChecklistBody()}
         </div>
     );
 }
