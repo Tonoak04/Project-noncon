@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS DailyForm (
   CONSTRAINT fk_dailyform_center FOREIGN KEY (Center_Id) REFERENCES Center(Center_Id) ON DELETE CASCADE,
   INDEX idx_dailyform_machine (Machine_Id),
   INDEX idx_dailyform_center (Center_Id),
-  UNIQUE KEY uq_dailyform_machine_period (Machine_Id, Form_Year, Form_Month),
+  UNIQUE KEY uq_dailyform_machine_period_unit (Machine_Id, Form_Year, Form_Month, Unit_Work),
   INDEX idx_dailyform_machine_period (Machine_Id, Form_Year, Form_Month)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

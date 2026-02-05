@@ -323,27 +323,38 @@ export const normalizeMachineRow = (row = {}) => {
 
 export const mapSignatureValues = (values = {}) => {
     const entries = Object.entries(values || {});
+    const dataset = { values: {}, labels: {} };
     if (entries.length === 0) {
-        return {};
+        return dataset;
     }
-    return entries.reduce((acc, [day, entry]) => {
+    entries.forEach(([day, entry]) => {
         if (typeof entry === 'string') {
-            acc[day] = entry;
-        } else if (entry && typeof entry === 'object' && 'signature' in entry) {
-            acc[day] = entry.signature || '';
+            dataset.values[day] = entry;
+            dataset.labels[day] = entry;
+        } else if (entry && typeof entry === 'object') {
+            const value = entry.value ?? entry.signature ?? '';
+            const label = entry.signature ?? entry.value ?? '';
+            dataset.values[day] = value || '';
+            dataset.labels[day] = label || '';
         } else {
-            acc[day] = '';
+            dataset.values[day] = '';
+            dataset.labels[day] = '';
         }
-        return acc;
-    }, {});
+    });
+    return dataset;
 };
 
-export const resolveSignatureDisplay = (value, options) => {
-    if (!value) {
-        return '';
+export const resolveSignatureDisplay = (value, options, fallbackLabel = '') => {
+    if (value) {
+        const match = options.find((option) => option.value === value);
+        if (match) {
+            return match.label;
+        }
     }
-    const match = options.find((option) => option.value === value);
-    return match ? match.label : value;
+    if (fallbackLabel) {
+        return fallbackLabel;
+    }
+    return value || '';
 };
 
 export const normalizeChecklistMatrix = (matrix = {}) => {

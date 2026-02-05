@@ -36,20 +36,30 @@ export default function Checklist() {
     const [checklistLoading, setChecklistLoading] = useState(false);
     const [checklistError, setChecklistError] = useState('');
     const [issueNotes, setIssueNotes] = useState('');
+    const [savedIssueNotes, setSavedIssueNotes] = useState('');
     const [selectedMachineId, setSelectedMachineId] = useState(null);
     const [status, setStatus] = useState('idle');
 
     const [foremanSignatures, setForemanSignatures] = useState({});
+    const [foremanSignatureLabels, setForemanSignatureLabels] = useState({});
     const [foremanLockedDays, setForemanLockedDays] = useState(() => new Set());
     const [pendingForemanDays, setPendingForemanDays] = useState(() => new Set());
 
     const [driverSignatures, setDriverSignatures] = useState({});
+    const [driverSignatureLabels, setDriverSignatureLabels] = useState({});
     const [driverLockedDays, setDriverLockedDays] = useState(() => new Set());
     const [pendingDriverSignatureDays, setPendingDriverSignatureDays] = useState(() => new Set());
 
     const [checklistValues, setChecklistValues] = useState({});
     const [lockedChecklistCells, setLockedChecklistCells] = useState(() => new Set());
     const [pendingChecklistCells, setPendingChecklistCells] = useState(() => new Set());
+
+    const currentPeriod = useMemo(() => {
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        return `${now.getFullYear()}-${month}`;
+    }, []);
+    const isPeriodEditable = Boolean(metaForm.period && metaForm.period === currentPeriod);
 
     const normalizedRoles = useMemo(() => {
         const source = Array.isArray(user?.roles) && user.roles.length
@@ -112,17 +122,21 @@ export default function Checklist() {
 
     const clearForemanState = useCallback(() => {
         setForemanSignatures({});
+        setForemanSignatureLabels({});
         setForemanLockedDays(new Set());
         setPendingForemanDays(new Set());
     }, []);
 
     const clearDriverState = useCallback(() => {
         setDriverSignatures({});
+        setDriverSignatureLabels({});
         setDriverLockedDays(new Set());
         setPendingDriverSignatureDays(new Set());
         setChecklistValues({});
         setLockedChecklistCells(new Set());
         setPendingChecklistCells(new Set());
+        setIssueNotes('');
+        setSavedIssueNotes('');
     }, []);
 
     useEffect(() => {
@@ -208,23 +222,56 @@ export default function Checklist() {
                     setVehicleType(data.machine.description);
                 }
                 if (data.meta) {
-                    setMetaForm((prev) => ({
-                        ...prev,
-                        department: data.meta.department || prev.department,
-                    }));
-                    setIssueNotes(data.meta.issueNotes || '');
+                    const serverDepartment = data.meta.department || '';
+                    setMetaForm((prev) => {
+                        if (!serverDepartment) {
+                            return prev;
+                        }
+                        if (prev.department && prev.department !== serverDepartment) {
+                            return prev;
+                        }
+                        return {
+                            ...prev,
+                            department: serverDepartment,
+                        };
+                    });
+                    const serverIssueNotes = data.meta.issueNotes ?? '';
+                    setIssueNotes(serverIssueNotes);
+                    setSavedIssueNotes(serverIssueNotes.trim());
                 } else {
                     setIssueNotes('');
+                    setSavedIssueNotes('');
                 }
-                setDriverSignatures(mapSignatureValues(data.driver?.values));
-                setDriverLockedDays(createDaySet(data.driver?.lockedDays));
+                const driverDataset = mapSignatureValues(data.driver?.values);
+                const driverLockedInitial = createDaySet(data.driver?.lockedDays);
+                const driverValuesResolved = { ...driverDataset.values };
+                const currentUserLabel = formatUserName(user) || '';
+                const currentUserCode = user?.employeeId || user?.Username || user?.username || '';
+                if (currentUserLabel && currentUserCode) {
+                    Object.entries(driverDataset.labels).forEach(([day, label]) => {
+                        if (
+                            label
+                            && driverValuesResolved[day]
+                            && driverValuesResolved[day] === label
+                            && label === currentUserLabel
+                        ) {
+                            driverValuesResolved[day] = currentUserCode;
+                        }
+                    });
+                }
+                setDriverSignatures(driverValuesResolved);
+                setDriverSignatureLabels(driverDataset.labels);
+                setDriverLockedDays(isPeriodEditable ? new Set() : driverLockedInitial);
                 setPendingDriverSignatureDays(new Set());
-                setForemanSignatures(mapSignatureValues(data.foreman?.values));
-                setForemanLockedDays(createDaySet(data.foreman?.lockedDays));
+                const foremanDataset = mapSignatureValues(data.foreman?.values);
+                const foremanLockedInitial = createDaySet(data.foreman?.lockedDays);
+                setForemanSignatures(foremanDataset.values);
+                setForemanSignatureLabels(foremanDataset.labels);
+                setForemanLockedDays(isPeriodEditable ? new Set() : foremanLockedInitial);
                 setPendingForemanDays(new Set());
                 const normalizedItems = normalizeChecklistMatrix(data.items?.values);
                 setChecklistValues(normalizedItems);
-                setLockedChecklistCells(buildChecklistLocks(normalizedItems));
+                setLockedChecklistCells(isPeriodEditable ? new Set() : buildChecklistLocks(normalizedItems));
                 setPendingChecklistCells(new Set());
             } catch (error) {
                 if (!ignore) {
@@ -257,6 +304,8 @@ export default function Checklist() {
         clearDriverState,
         clearForemanState,
         createDaySet,
+        isPeriodEditable,
+        user,
     ]);
 
     const handleSelectMachine = (code) => {
@@ -360,7 +409,7 @@ export default function Checklist() {
 
         if (item.signatureRole === 'foreman') {
             if (!isForeman) {
-                const displayValue = resolveSignatureDisplay(value, foremanOptions);
+                const displayValue = resolveSignatureDisplay(value, foremanOptions, foremanSignatureLabels[dayKey]);
                 return (
                     <input
                         type="text"
@@ -375,10 +424,12 @@ export default function Checklist() {
                 <select
                     className="signature-grid-input"
                     value={value}
-                    disabled={!isMetaComplete || isLocked || checklistLoading || foremanOptions.length === 0}
+                    disabled={!isMetaComplete || !isPeriodEditable || isLocked || checklistLoading || foremanOptions.length === 0}
                     onChange={(event) => {
                         const nextValue = event.target.value;
                         setForemanSignatures((prev) => ({ ...prev, [dayKey]: nextValue }));
+                        const label = foremanOptions.find((option) => option.value === nextValue)?.label || '';
+                        setForemanSignatureLabels((prev) => ({ ...prev, [dayKey]: label || '' }));
                         updatePendingForemanDay(day, Boolean(nextValue));
                     }}
                     aria-label={`ลงชื่อ ข้อ ${item.order} วันที่ ${day}`}
@@ -398,7 +449,7 @@ export default function Checklist() {
             const driverValue = driverSignatures[dayKey] ?? '';
             const driverLocked = driverLockedDays.has(day);
             if (driverLocked || isForeman || isOnlyView) {
-                const displayValue = resolveSignatureDisplay(driverValue, driverOptions);
+                const displayValue = resolveSignatureDisplay(driverValue, driverOptions, driverSignatureLabels[dayKey]);
                 return (
                     <input
                         type="text"
@@ -413,10 +464,12 @@ export default function Checklist() {
                 <select
                     className="signature-grid-input"
                     value={driverValue}
-                    disabled={!isMetaComplete || checklistLoading || driverOptions.length === 0 || isOnlyView}
+                    disabled={!isMetaComplete || !isPeriodEditable || checklistLoading || driverOptions.length === 0 || isOnlyView}
                     onChange={(event) => {
                         const nextValue = event.target.value;
                         setDriverSignatures((prev) => ({ ...prev, [dayKey]: nextValue }));
+                        const label = driverOptions.find((option) => option.value === nextValue)?.label || '';
+                        setDriverSignatureLabels((prev) => ({ ...prev, [dayKey]: label || '' }));
                         updatePendingDriverSignatureDay(day, Boolean(nextValue));
                     }}
                     aria-label={`ลงชื่อ ข้อ ${item.order} วันที่ ${day}`}
@@ -437,7 +490,7 @@ export default function Checklist() {
     const handleStatusChange = (day, order, nextValue) => {
         const dayKey = String(day);
         const key = `${dayKey}:${order}`;
-        if (lockedChecklistCells.has(key)) {
+        if (lockedChecklistCells.has(key) || !isPeriodEditable) {
             return;
         }
         setChecklistValues((prev) => {
@@ -451,6 +504,8 @@ export default function Checklist() {
     const hasPendingForemanSignatures = pendingForemanDays.size > 0;
     const hasPendingDriverSignatures = pendingDriverSignatureDays.size > 0;
     const hasPendingDriverStatuses = pendingChecklistCells.size > 0;
+    const issueNotesTrimmed = issueNotes.trim();
+    const hasIssueNotesChange = issueNotesTrimmed !== savedIssueNotes;
 
     const handleSave = async () => {
         if (!isMetaComplete || !metaForm.period) {
@@ -458,8 +513,13 @@ export default function Checklist() {
             return;
         }
 
+        if (!isPeriodEditable) {
+            alert('แบบฟอร์มของเดือนที่เลือกถูกปิดไม่ให้แก้ไขแล้ว');
+            return;
+        }
+
         if (isDriver) {
-            if (!hasPendingDriverSignatures && !hasPendingDriverStatuses) {
+            if (!hasPendingDriverSignatures && !hasPendingDriverStatuses && !hasIssueNotesChange) {
                 alert('ยังไม่มีข้อมูลใหม่สำหรับบันทึก');
                 return;
             }
@@ -498,7 +558,11 @@ export default function Checklist() {
                 }
             }
 
-            if (!payload.signatures && !payload.items) {
+            if (hasIssueNotesChange) {
+                payload.issueNotes = issueNotesTrimmed;
+            }
+
+            if (!payload.signatures && !payload.items && !payload.issueNotes) {
                 alert('ยังไม่มีข้อมูลใหม่สำหรับบันทึก');
                 return;
             }
@@ -512,11 +576,15 @@ export default function Checklist() {
                 const response = await apiPost('/api/checklist.php', payload);
                 if (hasPendingDriverSignatures) {
                     const lockedDays = Array.isArray(response.lockedDays) ? response.lockedDays : pendingSignatureDays;
-                    setDriverLockedDays((prev) => {
-                        const next = new Set(prev);
-                        lockedDays.forEach((day) => next.add(Number(day)));
-                        return next;
-                    });
+                    if (!isPeriodEditable) {
+                        setDriverLockedDays((prev) => {
+                            const next = new Set(prev);
+                            lockedDays.forEach((day) => next.add(Number(day)));
+                            return next;
+                        });
+                    } else {
+                        setDriverLockedDays(new Set());
+                    }
                     setPendingDriverSignatureDays(new Set());
                 }
                 if (hasPendingDriverStatuses) {
@@ -541,15 +609,22 @@ export default function Checklist() {
                             });
                             return next;
                         });
-                        setLockedChecklistCells((prev) => {
-                            const next = new Set(prev);
-                            fallbackItems.forEach((item) => {
-                                next.add(`${String(item.day)}:${Number(item.order)}`);
+                        if (!isPeriodEditable) {
+                            setLockedChecklistCells((prev) => {
+                                const next = new Set(prev);
+                                fallbackItems.forEach((item) => {
+                                    next.add(`${String(item.day)}:${Number(item.order)}`);
+                                });
+                                return next;
                             });
-                            return next;
-                        });
+                        } else {
+                            setLockedChecklistCells(new Set());
+                        }
                     }
                     setPendingChecklistCells(new Set());
+                }
+                if (hasIssueNotesChange) {
+                    setSavedIssueNotes(issueNotesTrimmed);
                 }
                 setStatus('saved');
                 setTimeout(() => setStatus('idle'), 1500);
@@ -590,11 +665,15 @@ export default function Checklist() {
         try {
             const response = await apiPost('/api/checklist.php', payload);
             const lockedDays = Array.isArray(response.lockedDays) ? response.lockedDays : pendingDays;
-            setForemanLockedDays((prev) => {
-                const next = new Set(prev);
-                lockedDays.forEach((day) => next.add(Number(day)));
-                return next;
-            });
+            if (!isPeriodEditable) {
+                setForemanLockedDays((prev) => {
+                    const next = new Set(prev);
+                    lockedDays.forEach((day) => next.add(Number(day)));
+                    return next;
+                });
+            } else {
+                setForemanLockedDays(new Set());
+            }
             setPendingForemanDays(new Set());
             setStatus('saved');
             setTimeout(() => setStatus('idle'), 1500);
@@ -609,10 +688,11 @@ export default function Checklist() {
     };
 
     const isSaveDisabled = isForeman
-        ? (!isMetaComplete || !metaForm.period || !hasPendingForemanSignatures || status === 'saving' || checklistLoading)
+        ? (!isMetaComplete || !metaForm.period || !isPeriodEditable || !hasPendingForemanSignatures || status === 'saving' || checklistLoading)
         : (!isMetaComplete
             || !metaForm.period
-            || (!hasPendingDriverSignatures && !hasPendingDriverStatuses)
+            || !isPeriodEditable
+            || (!hasPendingDriverSignatures && !hasPendingDriverStatuses && !hasIssueNotesChange)
             || status === 'saving'
             || checklistLoading);
 
@@ -639,9 +719,17 @@ export default function Checklist() {
         </div>
     ) : null;
 
+    const periodLockBanner = metaForm.period && !isPeriodEditable ? (
+        <div style={{ margin: '0.5rem 0', padding: '0.5rem 0.75rem', background: '#fff3cd', borderRadius: 6, color: '#7c5b00' }}>
+            <strong>ปิดการแก้ไข</strong>
+            <div style={{ fontSize: 13 }}>อนุญาตให้แก้ไขเฉพาะแบบฟอร์มเดือน {currentPeriod} เท่านั้น</div>
+        </div>
+    ) : null;
+
     const renderChecklistBody = () => (
         <>
             {onlyViewBanner}
+            {periodLockBanner}
 
             {checklistError && (
                 <p style={{ color: '#c0392b', fontWeight: 600, marginTop: '0.75rem' }}>{checklistError}</p>
@@ -693,7 +781,7 @@ export default function Checklist() {
                                                         className="status-select"
                                                         value={checklistValues[String(day)]?.[item.order] ?? ''}
                                                         aria-label={`เลือกสถานะ ข้อ ${item.order} วันที่ ${day}`}
-                                                        disabled={!isMetaComplete || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isOnlyView}
+                                                        disabled={!isMetaComplete || !isPeriodEditable || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isOnlyView}
                                                         onChange={(event) => handleStatusChange(day, item.order, event.target.value)}
                                                     >
                                                         {STATUS_OPTIONS.map((option) => (
@@ -733,6 +821,7 @@ export default function Checklist() {
                                 rows="4"
                                 placeholder="กรอกรายละเอียดปัญหาที่พบระหว่างการตรวจเช็ก"
                                 value={issueNotes}
+                                disabled={!isMetaComplete || !isPeriodEditable || isForeman || isOnlyView}
                                 onChange={(event) => setIssueNotes(event.target.value)}
                             />
                         </label>

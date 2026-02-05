@@ -252,8 +252,10 @@ export default function ChecklistAdmin() {
                 } else {
                     setIssueNotes('');
                 }
-                setDriverSignatures(mapSignatureValues(data.driver?.values));
-                setForemanSignatures(mapSignatureValues(data.foreman?.values));
+                const driverDataset = mapSignatureValues(data.driver?.values);
+                const foremanDataset = mapSignatureValues(data.foreman?.values);
+                setDriverSignatures(driverDataset.labels);
+                setForemanSignatures(foremanDataset.labels);
                 const normalizedItems = normalizeChecklistMatrix(data.items?.values);
                 setChecklistValues(normalizedItems);
             } catch (error) {

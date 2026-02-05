@@ -54,6 +54,18 @@ function parse_period(string $period): array
     return ['year' => $year, 'month' => $month];
 }
 
+function is_current_period(array $period): bool
+{
+    try {
+        $now = new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    } catch (Exception $e) {
+        $now = new DateTimeImmutable('now');
+    }
+    $currentYear = (int)$now->format('Y');
+    $currentMonth = (int)$now->format('n');
+    return $period['year'] === $currentYear && $period['month'] === $currentMonth;
+}
+
 function resolve_machine(PDO $pdo, ?int $machineId, string $machineCode): ?array
 {
     if ($machineId && $machineId > 0) {
@@ -89,57 +101,57 @@ function resolve_machine(PDO $pdo, ?int $machineId, string $machineCode): ?array
     return null;
 }
 
+function normalize_department_key(?string $department): string
+{
+    $value = trim((string)$department);
+    if ($value === '') {
+        return '';
+    }
+    return mb_substr($value, 0, 255);
+}
+
 function get_daily_form(PDO $pdo, int $machineId, int $year, int $month, ?string $department = null): ?array
 {
-    $departmentKey = $department !== null && $department !== '' ? mb_substr($department, 0, 255) : null;
+    $departmentKey = normalize_department_key($department);
     $baseSql = 'SELECT DailyForm_Id, Machine_Id, Center_Id, Form_Month, Form_Year, Unit_Work FROM DailyForm WHERE Machine_Id = ? AND Form_Year = ? AND Form_Month = ?';
     $params = [$machineId, $year, $month];
 
-    if ($departmentKey !== null) {
-        $stmt = $pdo->prepare($baseSql . ' AND Unit_Work = ? LIMIT 1');
-        $paramsWithDepartment = array_merge($params, [$departmentKey]);
-        $stmt->execute($paramsWithDepartment);
+    $queries = [];
+    if ($departmentKey !== '') {
+        $queries[] = [$baseSql . ' AND Unit_Work = ? LIMIT 1', array_merge($params, [$departmentKey])];
+        // Legacy fallback: rows that never stored a department
+        $queries[] = [$baseSql . " AND (Unit_Work IS NULL OR Unit_Work = '') LIMIT 1", $params];
+    } else {
+        $queries[] = [$baseSql . " AND (Unit_Work IS NULL OR Unit_Work = '') LIMIT 1", $params];
+    }
+
+    foreach ($queries as [$sql, $sqlParams]) {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($sqlParams);
         $row = $stmt->fetch();
         if ($row) {
             return $row;
         }
-
-        // Legacy fallback: locate forms that were saved before department linkage existed.
-        $stmt = $pdo->prepare($baseSql . " AND (Unit_Work IS NULL OR Unit_Work = '') LIMIT 1");
-        $stmt->execute($params);
-        $row = $stmt->fetch();
-        return $row ?: null;
     }
 
-    $stmt = $pdo->prepare($baseSql . ' LIMIT 1');
-    $stmt->execute($params);
-    $row = $stmt->fetch();
-    return $row ?: null;
+    return null;
 }
 
 function ensure_daily_form(PDO $pdo, int $machineId, int $centerId, int $year, int $month, ?string $department = null): int
 {
-    $department = $department !== null && $department !== '' ? mb_substr($department, 0, 255) : null;
-    $existing = get_daily_form($pdo, $machineId, $year, $month, $department);
+    $departmentKey = normalize_department_key($department);
+    $existing = get_daily_form($pdo, $machineId, $year, $month, $departmentKey);
 
     if ($existing) {
-        $updates = [];
-        $params = [];
-        if ($department !== null && (string)($existing['Unit_Work'] ?? '') !== $department) {
-            $updates[] = 'Unit_Work = ?';
-            $params[] = $department;
-        }
-        if ($updates) {
-            $params[] = (int)$existing['DailyForm_Id'];
-            $sql = 'UPDATE DailyForm SET ' . implode(', ', $updates) . ' WHERE DailyForm_Id = ? LIMIT 1';
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
+        if ((string)($existing['Unit_Work'] ?? '') !== $departmentKey) {
+            $stmt = $pdo->prepare('UPDATE DailyForm SET Unit_Work = ?, Updated_at = NOW() WHERE DailyForm_Id = ? LIMIT 1');
+            $stmt->execute([$departmentKey, (int)$existing['DailyForm_Id']]);
         }
         return (int)$existing['DailyForm_Id'];
     }
 
     $stmt = $pdo->prepare("INSERT INTO DailyForm (Machine_Id, Center_Id, Form_Month, Form_Year, Unit_Work, Overall_Status) VALUES (?, ?, ?, ?, ?, '-')");
-    $stmt->execute([$machineId, $centerId, $month, $year, $department]);
+    $stmt->execute([$machineId, $centerId, $month, $year, $departmentKey]);
     return (int)$pdo->lastInsertId();
 }
 
@@ -208,13 +220,16 @@ function get_signature_item_id(PDO $pdo, int $order = 17): int
 
 function load_signature_values(PDO $pdo, int $dailyFormId, int $itemId): array
 {
-    $stmt = $pdo->prepare('SELECT Check_Day, Signature FROM DailyChecklistValue WHERE DailyForm_Id = ? AND Item_Id = ? ORDER BY Check_Day');
+    $stmt = $pdo->prepare('SELECT Check_Day, Signature, Note FROM DailyChecklistValue WHERE DailyForm_Id = ? AND Item_Id = ? ORDER BY Check_Day');
     $stmt->execute([$dailyFormId, $itemId]);
     $rows = $stmt->fetchAll();
     $values = [];
     foreach ($rows as $row) {
         $dayKey = (string)((int)$row['Check_Day']);
-        $values[$dayKey] = (string)($row['Signature'] ?? '');
+        $values[$dayKey] = [
+            'value' => $row['Note'] ?? null,
+            'signature' => $row['Signature'] ?? null,
+        ];
     }
     return $values;
 }
@@ -235,11 +250,39 @@ function load_item_results(PDO $pdo, int $dailyFormId): array
     return $matrix;
 }
 
-function checklist_value_exists(PDO $pdo, int $dailyFormId, int $itemId, int $day): bool
+function upsert_signature_value(PDO $pdo, int $dailyFormId, int $itemId, int $day, string $signature, string $employeeId, ?string $selectionCode = null): void
 {
-    $stmt = $pdo->prepare('SELECT Value_Id FROM DailyChecklistValue WHERE DailyForm_Id = ? AND Item_Id = ? AND Check_Day = ? LIMIT 1');
-    $stmt->execute([$dailyFormId, $itemId, $day]);
-    return (bool)$stmt->fetchColumn();
+    $sql = <<<SQL
+INSERT INTO DailyChecklistValue (DailyForm_Id, Item_Id, Check_Day, Result, Note, Signature, Checked_By, Checked_At)
+VALUES (:formId, :itemId, :day, '-', :note, :signature, :employee, NOW())
+ON DUPLICATE KEY UPDATE Signature = VALUES(Signature), Note = VALUES(Note), Checked_By = VALUES(Checked_By), Checked_At = NOW()
+SQL;
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':formId' => $dailyFormId,
+        ':itemId' => $itemId,
+        ':day' => $day,
+        ':note' => $selectionCode,
+        ':signature' => $signature,
+        ':employee' => $employeeId,
+    ]);
+}
+
+function upsert_checklist_result(PDO $pdo, int $dailyFormId, int $itemId, int $day, string $result, string $employeeId): void
+{
+    $sql = <<<SQL
+INSERT INTO DailyChecklistValue (DailyForm_Id, Item_Id, Check_Day, Result, Note, Signature, Checked_By, Checked_At)
+VALUES (:formId, :itemId, :day, :result, NULL, NULL, :employee, NOW())
+ON DUPLICATE KEY UPDATE Result = VALUES(Result), Checked_By = VALUES(Checked_By), Checked_At = NOW()
+SQL;
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':formId' => $dailyFormId,
+        ':itemId' => $itemId,
+        ':day' => $day,
+        ':result' => $result,
+        ':employee' => $employeeId,
+    ]);
 }
 
 function build_signature_string(array $user): string
@@ -289,6 +332,7 @@ function handle_checklist_get(array $user): void
     if ($form) {
         $meta = [
             'department' => $form['Unit_Work'] ?? null,
+            'issueNotes' => $form['Problem_Description'] ?? null,
         ];
     }
 
@@ -333,6 +377,11 @@ function handle_checklist_post(array $user): void
     $itemsPayload = isset($payload['items']) && is_array($payload['items']) ? $payload['items'] : [];
     $signatureType = isset($payload['signatureType']) ? strtolower(trim((string)$payload['signatureType'])) : ($isForeman ? 'foreman' : 'driver');
     $departmentName = isset($payload['department']) ? trim((string)$payload['department']) : '';
+    $issueNotesProvided = array_key_exists('issueNotes', $payload);
+    $issueNotesValue = $issueNotesProvided ? trim((string)$payload['issueNotes']) : null;
+    if ($issueNotesProvided && $issueNotesValue !== null && mb_strlen($issueNotesValue) > 2000) {
+        throw new InvalidArgumentException('รายละเอียดปัญหายาวเกินไป (สูงสุด 2000 ตัวอักษร)');
+    }
 
     if (!in_array($signatureType, ['driver', 'foreman'], true)) {
         throw new InvalidArgumentException('ไม่รู้จักประเภทลายเซ็น');
@@ -374,7 +423,7 @@ function handle_checklist_post(array $user): void
         }
     }
 
-    if (!$hasSignatures && !$hasItems) {
+    if (!$hasSignatures && !$hasItems && !$issueNotesProvided) {
         throw new InvalidArgumentException('ยังไม่มีข้อมูลสำหรับบันทึก');
     }
 
@@ -404,12 +453,14 @@ function handle_checklist_post(array $user): void
                 if ($day < 1 || $day > 31) {
                     throw new InvalidArgumentException('วันต้องอยู่ระหว่าง 1-31');
                 }
-                if (checklist_value_exists($pdo, $formId, $itemId, $day)) {
-                    throw new ChecklistLockedException('ไม่สามารถแก้ไขวันที่ ' . $day . ' ได้แล้ว');
+                if ((string)$rawValue === '') {
+                    continue;
                 }
-                $stmt = $pdo->prepare("INSERT INTO DailyChecklistValue (DailyForm_Id, Item_Id, Check_Day, Result, Note, Signature, Checked_By, Checked_At) VALUES (?, ?, ?, '-', NULL, ?, ?, NOW())");
-                $stmt->execute([$formId, $itemId, $day, $signatureValue, $employeeId]);
-                $insertedDays[] = $day;
+                $selectionCode = trim((string)$rawValue) ?: null;
+                upsert_signature_value($pdo, $formId, $itemId, $day, $signatureValue, $employeeId, $selectionCode);
+                if (!in_array($day, $insertedDays, true)) {
+                    $insertedDays[] = $day;
+                }
             }
         }
 
@@ -436,11 +487,7 @@ function handle_checklist_post(array $user): void
                         throw new InvalidArgumentException('ค่าการตรวจสอบไม่ถูกต้อง');
                     }
                     $itemId = get_checklist_item_id($pdo, $order);
-                    if (checklist_value_exists($pdo, $formId, $itemId, $day)) {
-                        throw new ChecklistLockedException('ข้อ ' . $order . ' วันที่ ' . $day . ' ถูกบันทึกแล้ว');
-                    }
-                    $stmt = $pdo->prepare("INSERT INTO DailyChecklistValue (DailyForm_Id, Item_Id, Check_Day, Result, Note, Signature, Checked_By, Checked_At) VALUES (?, ?, ?, ?, NULL, NULL, ?, NOW())");
-                    $stmt->execute([$formId, $itemId, $day, $resultString, $employeeId]);
+                    upsert_checklist_result($pdo, $formId, $itemId, $day, $resultString, $employeeId);
                     $insertedItems[] = [
                         'day' => $day,
                         'order' => $order,
@@ -448,6 +495,12 @@ function handle_checklist_post(array $user): void
                     ];
                 }
             }
+        }
+
+        if ($issueNotesProvided) {
+            $noteToStore = ($issueNotesValue === null || $issueNotesValue === '') ? null : $issueNotesValue;
+            $stmt = $pdo->prepare('UPDATE DailyForm SET Problem_Description = ?, Updated_at = NOW() WHERE DailyForm_Id = ? LIMIT 1');
+            $stmt->execute([$noteToStore, $formId]);
         }
 
         $pdo->commit();
