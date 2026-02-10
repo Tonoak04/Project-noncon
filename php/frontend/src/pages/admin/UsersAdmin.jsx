@@ -1,5 +1,6 @@
-import { lazy, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { apiPatch, apiPost } from '../../api.js';
 
 const roleOptions = [
     { value: 'admin', label: 'Admin' },
@@ -10,95 +11,8 @@ const roleOptions = [
     { value: 'oiler', label: 'คนจ่ายน้ำมัน' },
 ];
 
-const departmentOptions = [
-    { value: 'operations', label: 'ฝ่ายปฏิบัติการ' },
-    { value: 'maintenance', label: 'ฝ่ายซ่อมบำรุง' },
-    { value: 'safety', label: 'ฝ่ายความปลอดภัย' },
-    { value: 'business', label: 'ฝ่ายลูกค้า/ธุรกิจ' },
-];
-
-const scopeOptions = [
-    { value: 'central-yard', label: 'Central Yard', description: 'คลังกลางและสำนักงานหลัก' },
-    { value: 'north-field', label: 'North Field', description: 'ไซต์ภาคเหนือ/เชียงราย' },
-    { value: 'east-lab', label: 'East Lab', description: 'ศูนย์ซ่อมและทดสอบเครื่องจักร' },
-    { value: 'mobile-team', label: 'Mobile Team', description: 'หน่วยเคลื่อนที่/สนับสนุนฉุกเฉิน' },
-];
-
-const moduleOptions = [
-    { id: 'machines', label: 'ฐานข้อมูลเครื่องจักร', description: 'สร้าง/แก้ไขข้อมูลเครื่องจักรและไฟล์แนบ', color: '#2c8bff', glyph: 'MC', defaultEnabled: true },
-    { id: 'reports', label: 'รายงานเหตุขัดข้อง', description: 'รับแจ้ง/คอมเมนต์รายงานซ่อม', color: '#f0506e', glyph: 'RP', defaultEnabled: true },
-    { id: 'oil', label: 'บันทึกน้ำมัน', description: 'บันทึกสต็อกและออกรายงานเติมน้ำมัน', color: '#f39c12', glyph: 'OL', defaultEnabled: true },
-    { id: 'checklist', label: 'แบบฟอร์มตรวจเช็ก', description: 'ดูและลงนามเช็กลิสต์รายวัน', color: '#3ac27b', glyph: 'CL', defaultEnabled: false },
-    { id: 'analytics', label: 'แดชบอร์ดวิเคราะห์', description: 'เข้าถึง KPI และการวิเคราะห์การใช้งาน', color: '#8e5cff', glyph: 'BI', defaultEnabled: false },
-];
-
-const onboardingSteps = [
-    { id: 1, title: 'ส่งคำเชิญ', detail: 'ระบบจะยิงอีเมลพร้อมลิงก์ตั้งรหัสผ่านแรกเข้า', eta: 'ภายใน 5 นาที' },
-    { id: 2, title: 'ยืนยันตัวตน', detail: 'เจ้าหน้าที่ต้องยืนยันหมายเลขโทรศัพท์/OTP', eta: 'ภายในวันเดียวกัน' },
-    { id: 3, title: 'ผูกสิทธิ์และโมดูล', detail: 'ระบบกำหนดสิทธิ์โมดูลตามบทบาทและขอบเขตงาน', eta: 'อัตโนมัติหลังยืนยัน' },
-    { id: 4, title: 'ตรวจสอบอุปกรณ์', detail: 'แจ้งทีม IT เพิ่มอุปกรณ์ Mobile หรือ Token ตามสิทธิ์', eta: '2-3 วันทำการ' },
-];
-
-const buildModuleState = () => moduleOptions.reduce((acc, option) => {
-    acc[option.id] = option.defaultEnabled !== false;
-    return acc;
-}, {});
-
-const createEmptyForm = () => ({
-    fullName: '',
-    centerName: '',
-    username: '',
-    employeeId: '',
-    email: '',
-    phone: '',
-    roles: ['operator'],
-    scopes: scopeOptions.length ? [scopeOptions[0].value] : [],
-    modules: buildModuleState(),
-    password: '',
-    confirmPassword: '',
-    expiresOn: '',
-    note: '',
-    notifyEmail: true,
-    notifySms: false,
-    notifyReport: true,
-});
-
-const mapDirectoryUserToForm = (user) => {
-    const template = createEmptyForm();
-    if (!user) {
-        return template;
-    }
-    return {
-        ...template,
-        fullName: user.fullName || template.fullName,
-        centerName: user.centerName || template.centerName,
-        username: user.username || template.username,
-        employeeId: user.employeeId || template.employeeId,
-        phone: user.phone || template.phone,
-        roles: user.roles?.length ? [...user.roles] : template.roles,
-        note: user.centerName ? `ข้อมูลจาก ${user.centerName}` : template.note,
-    };
-};
-
 const usernamePattern = /^[a-z0-9._-]{4,24}$/i;
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^[0-9+\-\s]{7,20}$/;
-
-const badgeBaseStyle = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '2px 10px',
-    borderRadius: '999px',
-    fontSize: '12px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-};
-
-const roleColors = {
-    admin: '#f0506e',
-    operator: '#2c8bff',
-    inspector: '#865dff',
-};
 
 const describeStrength = (password) => {
     if (!password) {
@@ -113,133 +27,131 @@ const describeStrength = (password) => {
     return { label: labels[score] || labels[4], score };
 };
 
+const createEmptyForm = () => ({
+    fullName: '',
+    centerName: '',
+    address: '',
+    username: '',
+    employeeId: '',
+    phone: '',
+    roles: ['operator'],
+    password: '',
+    confirmPassword: '',
+});
+
+const mapDirectoryUserToForm = (user) => {
+    const template = createEmptyForm();
+    if (!user) {
+        return template;
+    }
+    return {
+        ...template,
+        fullName: user.fullName || template.fullName,
+        centerName: user.centerName || template.centerName,
+        address: user.address || template.address,
+        username: user.username || template.username,
+        employeeId: user.employeeId || template.employeeId,
+        phone: user.phone || template.phone,
+        roles: Array.isArray(user.roles) && user.roles.length ? [...user.roles] : template.roles,
+    };
+};
+
 export default function UsersAdmin() {
     const navigate = useNavigate();
     const location = useLocation();
     const editingUser = location.state?.editingUser;
     const [form, setForm] = useState(createEmptyForm);
     const [formErrors, setFormErrors] = useState({});
-    const [flashMessage, setFlashMessage] = useState('');
+    const [toast, setToast] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [editingSource, setEditingSource] = useState(null);
     const [editingLabel, setEditingLabel] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const toastTimerRef = useRef(null);
     const passwordStrength = useMemo(() => describeStrength(form.password), [form.password]);
-    const previewData = useMemo(() => {
-        const department = departmentOptions.find((dept) => dept.value === form.department);
-        const selectedRoles = roleOptions.filter((option) => (form.roles || []).includes(option.value));
-        const scopes = scopeOptions.filter((scope) => (form.scopes || []).includes(scope.value));
-        const modules = moduleOptions.filter((module) => (form.modules || {})[module.id]);
-        return {
-            departmentLabel: department?.label || 'ไม่ระบุฝ่าย',
-            roleLabel: selectedRoles[0]?.label || (form.roles?.[0] ?? ''),
-            roleLabels: selectedRoles.map((option) => option.label),
-            scopes,
-            modules,
-        };
-    }, [form]);
+
+    const showToast = (type, message, duration = 3500) => {
+        if (toastTimerRef.current) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+        setToast({ type, message });
+        toastTimerRef.current = window.setTimeout(() => {
+            setToast(null);
+            toastTimerRef.current = null;
+        }, duration);
+    };
+
+    useEffect(() => () => {
+        if (toastTimerRef.current) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+    }, []);
+
+    const clearFieldError = (field) => {
+        setFormErrors((prev) => {
+            if (!prev[field]) {
+                return prev;
+            }
+            const next = { ...prev };
+            delete next[field];
+            return next;
+        });
+    };
 
     const updateFormField = (field) => (event) => {
         const value = event.target.value;
         setForm((prev) => ({ ...prev, [field]: value }));
-        if (formErrors[field]) {
-            setFormErrors((prev) => {
-                const next = { ...prev };
-                delete next[field];
-                return next;
-            });
-        }
+        clearFieldError(field);
     };
 
     const validateForm = () => {
         const errors = {};
         if (!form.fullName.trim()) errors.fullName = 'กรุณากรอกชื่อ-นามสกุล';
+        if (!form.centerName.trim()) errors.centerName = 'กรุณากรอกชื่อศูนย์/หน่วยงาน';
+        if (!form.address.trim()) errors.address = 'กรุณากรอกที่อยู่';
         if (!usernamePattern.test(form.username.trim())) {
             errors.username = 'ต้องมี 4-24 ตัวอักษร (a-z, 0-9, ._- )';
-        }
-        if (!emailPattern.test(form.email.trim())) {
-            errors.email = 'รูปแบบอีเมลไม่ถูกต้อง';
-        }
-        if (!form.centerName.trim()) {
-            errors.centerName = 'กรุณากรอกชื่อศูนย์/หน่วยงาน';
         }
         if (!form.employeeId.trim()) {
             errors.employeeId = 'กรุณากรอกรหัสพนักงาน (Employee ID)';
         }
-        if (form.phone && !phonePattern.test(form.phone.trim())) {
+        const phoneValue = form.phone.trim();
+        if (!phoneValue) {
+            errors.phone = 'กรุณากรอกเบอร์ติดต่อ';
+        } else if (!phonePattern.test(phoneValue)) {
             errors.phone = 'เบอร์โทรไม่ถูกต้อง';
-        }
-        if (!form.department) {
-            errors.department = 'เลือกฝ่ายที่สังกัด';
         }
         if (!form.roles || form.roles.length === 0) {
             errors.roles = 'เลือกสิทธิ์อย่างน้อย 1 รายการ';
         }
-        if (!form.scopes || form.scopes.length === 0) {
-            errors.scopes = 'เลือกขอบเขตงานอย่างน้อย 1 รายการ';
-        }
-        if (!Object.values(form.modules || {}).some(Boolean)) {
-            errors.modules = 'ต้องเปิดใช้งานอย่างน้อย 1 โมดูล';
-        }
-        if (form.expiresOn) {
-            const today = new Date();
-            const expiryDate = new Date(form.expiresOn);
-            if (expiryDate < new Date(today.toISOString().slice(0, 10))) {
-                errors.expiresOn = 'วันที่หมดอายุต้องอยู่ในอนาคต';
+        const passwordValue = form.password;
+        const confirmValue = form.confirmPassword;
+        if (!isEditing) {
+            if (!passwordValue || passwordValue.length < 8) {
+                errors.password = 'รหัสผ่านขั้นต่ำ 8 ตัวอักษร';
+            }
+            if (passwordValue !== confirmValue) {
+                errors.confirmPassword = 'รหัสผ่านไม่ตรงกัน';
+            }
+        } else if (passwordValue || confirmValue) {
+            if (!passwordValue || passwordValue.length < 8) {
+                errors.password = 'รหัสผ่านขั้นต่ำ 8 ตัวอักษร';
+            }
+            if (!confirmValue) {
+                errors.confirmPassword = 'กรุณายืนยันรหัสผ่านให้ครบถ้วน';
+            } else if (passwordValue !== confirmValue) {
+                errors.confirmPassword = 'รหัสผ่านไม่ตรงกัน';
             }
         }
-        if (!form.password || form.password.length < 8) {
-            errors.password = 'รหัสผ่านขั้นต่ำ 8 ตัวอักษร';
-        }
-        if (form.password !== form.confirmPassword) {
-            errors.confirmPassword = 'รหัสผ่านไม่ตรงกัน';
-        }
         return errors;
-    };
-
-    const handleScopeToggle = (value) => () => {
-        setForm((prev) => {
-            const exists = prev.scopes.includes(value);
-            const nextScopes = exists
-                ? prev.scopes.filter((scope) => scope !== value)
-                : [...prev.scopes, value];
-            return { ...prev, scopes: nextScopes };
-        });
-    };
-
-    const handleModuleToggle = (moduleId) => (event) => {
-        const checked = event.target.checked;
-        setForm((prev) => ({
-            ...prev,
-            modules: {
-                ...prev.modules,
-                [moduleId]: checked,
-            },
-        }));
-    };
-
-    const handleNotificationToggle = (field) => (event) => {
-        setForm((prev) => ({ ...prev, [field]: event.target.checked }));
     };
 
     const handleRolesSelectChange = (event) => {
         const selectedRoles = Array.from(event.target.selectedOptions || []).map((option) => option.value);
         setForm((prev) => ({ ...prev, roles: selectedRoles }));
-        if (formErrors.roles) {
-            setFormErrors((prev) => {
-                const next = { ...prev };
-                delete next.roles;
-                return next;
-            });
-        }
+        clearFieldError('roles');
     };
-
-    const previewInitials = (form.fullName || form.username || 'ผู้ใช้').slice(0, 2).toUpperCase();
-    const notificationSummary = [
-        form.notifyEmail ? 'Email' : null,
-        form.notifySms ? 'SMS' : null,
-        form.notifyReport ? 'สรุปรายวัน' : null,
-    ].filter(Boolean).join(', ') || 'ยังไม่ตั้งค่าแจ้งเตือน';
 
     useEffect(() => {
         if (editingUser) {
@@ -257,9 +169,7 @@ export default function UsersAdmin() {
         setEditingLabel('');
         setForm(createEmptyForm());
         setFormErrors({});
-        if (editingUser) {
-            navigate('/admin/users', { replace: true });
-        }
+        navigate('/admin/users/all');
     };
 
     const handleResetForm = () => {
@@ -272,39 +182,62 @@ export default function UsersAdmin() {
         setFormErrors({});
     };
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
         const errors = validateForm();
         if (Object.keys(errors).length) {
             setFormErrors(errors);
             return;
         }
-        const now = new Date();
-        const newUser = {
-            id: `USR-${(Math.floor(Math.random() * 9000) + 1000).toString()}`,
+
+        const trimmedPassword = form.password.trim();
+        const trimmedConfirm = form.confirmPassword.trim();
+
+        const payload = {
             fullName: form.fullName.trim(),
             centerName: form.centerName.trim(),
+            address: form.address.trim(),
             username: form.username.trim(),
             employeeId: form.employeeId.trim(),
-            email: form.email.trim(),
             phone: form.phone.trim(),
-            department: form.department,
-            role: form.roles?.[0] || 'operator',
             roles: [...(form.roles || [])],
-            scopes: [...form.scopes],
-            modules: { ...form.modules },
-            expiresOn: form.expiresOn,
-            lastLogin: now.toLocaleString('th-TH', { hour12: false }),
         };
-        const actionLabel = isEditing ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ใช้งาน';
-        setFlashMessage(`${actionLabel} "${newUser.fullName}" เรียบร้อย (ตัวอย่าง)`);
+
         if (isEditing) {
-            exitEditingMode();
-        } else {
-            setForm(createEmptyForm());
-            setFormErrors({});
+            const editingId = Number(editingSource?.id);
+            if (!Number.isInteger(editingId) || editingId <= 0) {
+                showToast('error', 'ไม่พบรหัสผู้ใช้งานที่ต้องการแก้ไข');
+                setIsSubmitting(false);
+                return;
+            }
+            payload.id = editingId;
         }
-        window.setTimeout(() => setFlashMessage(''), 3500);
+
+        if (!isEditing || trimmedPassword || trimmedConfirm) {
+            payload.password = trimmedPassword;
+            payload.confirmPassword = trimmedConfirm;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const apiCall = isEditing ? apiPatch : apiPost;
+            const response = await apiCall('/api/admin/users.php', payload);
+            const savedUser = response?.user;
+            const displayName = savedUser?.fullName || payload.fullName;
+            const actionLabel = isEditing ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ใช้งาน';
+            showToast('success', `${actionLabel} "${displayName}" เรียบร้อย`);
+            if (isEditing) {
+                exitEditingMode();
+            } else {
+                setForm(createEmptyForm());
+                setFormErrors({});
+            }
+        } catch (error) {
+            const message = error?.message || 'ไม่สามารถบันทึกข้อมูลได้';
+            showToast('error', `บันทึกไม่สำเร็จ: ${message}`);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleReset = () => {
@@ -315,7 +248,7 @@ export default function UsersAdmin() {
     const formSubtitle = isEditing
         ? 'แก้ไขรายละเอียดผู้ใช้งานที่เลือกจากรายชื่อทั้งหมด'
         : 'ระบุรายละเอียดผู้ใช้งานที่ต้องการเชิญ';
-    const submitLabel = isEditing ? 'บันทึกการแก้ไข (ตัวอย่าง)' : 'บันทึกผู้ใช้งาน (ตัวอย่าง)';
+    const submitLabel = isEditing ? 'บันทึกการแก้ไข' : 'บันทึกผู้ใช้งาน';
     const resetLabel = isEditing ? 'คืนค่าแบบฟอร์ม' : 'ล้างฟอร์ม';
 
     return (
@@ -338,9 +271,12 @@ export default function UsersAdmin() {
                 </section>
             </div>
 
-            {flashMessage && (
-                <div className="alert success admin-users__alert">
-                    {flashMessage}
+            {toast && (
+                <div
+                    className={`alert ${toast.type === 'success' ? 'success' : 'danger'} admin-users__alert`}
+                    role="alert"
+                >
+                    {toast.message}
                 </div>
             )}
 
@@ -382,9 +318,29 @@ export default function UsersAdmin() {
 
                     <label className="form-field">
                         <span>
+                            ที่อยู่หน่วยงาน <span className="required-mark">*</span>
+                        </span>
+                        <input
+                            type="text"
+                            value={form.address}
+                            onChange={updateFormField('address')}
+                            placeholder="HQ"
+                            required
+                        />
+                        {formErrors.address && <small className="error-row">{formErrors.address}</small>}
+                    </label>
+
+                    <label className="form-field">
+                        <span>
                             รหัสพนักงาน (Username) <span className="required-mark">*</span>
                         </span>
-                        <input type="text" value={form.username} onChange={updateFormField('username')} placeholder="รหัสพนักงาน" required />
+                        <input
+                            type="text"
+                            value={form.username}
+                            onChange={updateFormField('username')}
+                            placeholder="รหัสพนักงาน"
+                            required
+                        />
                         {formErrors.username && <small className="error-row">{formErrors.username}</small>}
                     </label>
 
@@ -406,7 +362,13 @@ export default function UsersAdmin() {
                         <span>
                             เบอร์ติดต่อ <span className="required-mark">*</span>
                         </span>
-                        <input type="text" value={form.phone} onChange={updateFormField('phone')} placeholder="08x-xxx-xxxx" required />
+                        <input
+                            type="text"
+                            value={form.phone}
+                            onChange={updateFormField('phone')}
+                            placeholder="08x-xxx-xxxx"
+                            required
+                        />
                         {formErrors.phone && <small className="error-row">{formErrors.phone}</small>}
                     </div>
 
@@ -437,28 +399,53 @@ export default function UsersAdmin() {
                         <span>
                             รหัสผ่าน <span className="required-mark">*</span>
                         </span>
-                        <input type="password" value={form.password} onChange={updateFormField('password')} placeholder="อย่างน้อย 8 ตัวอักษร" required />
+                        <input
+                            type="password"
+                            value={form.password}
+                            onChange={updateFormField('password')}
+                            placeholder="อย่างน้อย 8 ตัวอักษร"
+                            required={!isEditing}
+                        />
                         {formErrors.password && <small className="error-row">{formErrors.password}</small>}
                         <div className="muted" style={{ fontSize: 12 }}>ความแข็งแรง: {passwordStrength.label}</div>
                     </label>
-                                
+
                     <label className="form-field">
                         <span>
                             ยืนยันรหัสผ่าน <span className="required-mark">*</span>
                         </span>
-                        <input type="password" value={form.confirmPassword} onChange={updateFormField('confirmPassword')} placeholder="กรอกรหัสผ่านอีกครั้ง" required/>
+                        <input
+                            type="password"
+                            value={form.confirmPassword}
+                            onChange={updateFormField('confirmPassword')}
+                            placeholder="กรอกรหัสผ่านอีกครั้ง"
+                            required={!isEditing}
+                        />
                         {formErrors.confirmPassword && <small className="error-row">{formErrors.confirmPassword}</small>}
                     </label>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <button type="button" className="button ghost" onClick={handleReset}>{resetLabel}</button>
+                    <div
+                        style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            marginTop: 12,
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                        }}
+                    >
+                        <button type="button" className="button primary" onClick={handleReset}>
+                            {resetLabel}
+                        </button>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                             {isEditing && (
-                                <button type="button" className="button ghost" onClick={exitEditingMode}>
+                                <button type="button" className="button primary" onClick={exitEditingMode}>
                                     ยกเลิกการแก้ไข
                                 </button>
                             )}
-                            <button type="submit" className="button primary">{submitLabel}</button>
+                            <button type="submit" className="button primary" disabled={isSubmitting}>
+                                {submitLabel}
+                            </button>
                         </div>
                     </div>
                 </form>

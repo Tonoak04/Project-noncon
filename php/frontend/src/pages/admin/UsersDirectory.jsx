@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet } from '../../api.js';
+import { apiDelete, apiGet } from '../../api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 const roleDictionary = {
     admin: 'ผู้ดูแลระบบ',
     operator: 'ผู้ใช้งานดูได้ทั้งเว็บ',
-    inspector: 'ผู้ตรวจสอบ',
     assistant: 'ผู้ตรวจสอบ(น้ำมัน)',
     driver: 'พลขับรถ',
     foreman: 'ผู้ตรวจสอบ(รถ)',
@@ -46,6 +45,7 @@ export default function UsersDirectory() {
     const [filters, setFilters] = useState({ search: '', role: '', center: '' });
     const [viewMode, setViewMode] = useState('table');
     const [refreshTick, setRefreshTick] = useState(0);
+    const [deletingIds, setDeletingIds] = useState(() => new Set());
     useEffect(() => {
         let active = true;
         const controller = new AbortController();
@@ -120,13 +120,42 @@ export default function UsersDirectory() {
         if (!user) return;
         navigate('/admin/users', { state: { editingUser: user } });
     };
-    const handleDeleteUser = (user) => {
+    const handleDeleteUser = async (user) => {
         if (!user) return;
-        const label = user.fullName || user.username || `#${user.id}`;
+        const userId = Number(user.id);
+        if (!Number.isInteger(userId) || userId <= 0) {
+            window.alert('ไม่พบรหัสผู้ใช้งานที่ต้องการลบ');
+            return;
+        }
+        const label = user.fullName || user.username || `#${userId}`;
         if (!window.confirm(`ต้องการลบบัญชี ${label} ออกจากรายการหรือไม่?`)) {
             return;
         }
-        setUsers((prev) => prev.filter((entry) => entry.id !== user.id));
+        setDeletingIds((prev) => {
+            const next = new Set(prev);
+            next.add(userId);
+            return next;
+        });
+        try {
+            await apiDelete(`/api/admin/users.php?id=${encodeURIComponent(userId)}`);
+            setUsers((prev) => prev.filter((entry) => entry.id !== userId));
+            setLastSync(new Date());
+        } catch (err) {
+            if (err?.status === 401) {
+                window.alert('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง');
+                logout('session-expired').catch(() => {});
+            } else if (err?.status === 403) {
+                window.alert('บัญชีนี้ไม่มีสิทธิ์ลบบัญชีผู้ใช้งาน');
+            } else {
+                window.alert(`ลบไม่สำเร็จ: ${err?.message || 'เกิดข้อผิดพลาดไม่ทราบสาเหตุ'}`);
+            }
+        } finally {
+            setDeletingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(userId);
+                return next;
+            });
+        }
     };
     const formatRoles = (roles = []) => {
         if (!roles.length) return '-';
@@ -153,6 +182,7 @@ export default function UsersDirectory() {
                 type="button"
                 className="users-directory__action-pill users-directory__action-pill--danger"
                 onClick={() => handleDeleteUser(user)}
+                disabled={deletingIds.has(Number(user.id))}
                 title="ลบบัญชีผู้ใช้งาน"
             >
                 <span className="users-directory__action-icon" aria-hidden="true">
@@ -312,7 +342,7 @@ export default function UsersDirectory() {
                 ) : filteredUsers.length === 0 && !loading ? (
                     <div className="users-directory__empty">
                         <p>ไม่พบผู้ใช้งานที่ตรงกับตัวกรอง</p>
-                        <button type="button" className="button ghost" onClick={() => setFilters({ search: '', role: '', center: '' })}>
+                        <button type="button" className="button" onClick={() => setFilters({ search: '', role: '', center: '' })}>
                             ล้างตัวกรอง
                         </button>
                     </div>

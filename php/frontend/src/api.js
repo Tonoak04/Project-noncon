@@ -58,3 +58,29 @@ export async function apiPatch(path, body) {
   }
   return data;
 }
+
+export async function apiDelete(path, body) {
+  const options = {
+    method: 'DELETE',
+    credentials: 'include',
+  };
+  if (body !== undefined) {
+    if (body instanceof FormData) {
+      options.body = body;
+    } else {
+      options.headers = { 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(body || {});
+    }
+  }
+  const res = await fetch(`${apiBase}${path}`, options);
+  let data = {};
+  try { data = await res.json(); } catch (_) { /* ignore */ }
+  if (!res.ok) {
+    const msg = data && data.error ? data.error : `${res.status} ${res.statusText}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}

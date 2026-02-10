@@ -5,13 +5,13 @@ CREATE TABLE IF NOT EXISTS Center (
   Password VARCHAR(255) NOT NULL,
   Address VARCHAR(255),
   CenterName VARCHAR(255),
-  `Role` VARCHAR(32) NOT NULL DEFAULT 'operator',
+  `Role` VARCHAR(128) NOT NULL DEFAULT 'operator',
   Created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   Updated_at DATETIME NULL DEFAULT NULL,
   Last_seen DATETIME NULL DEFAULT NULL,
   Name varchar(255) NOT NULL,
   Lastname varchar(255) NOT NULL,
-  Phone varchar(12) NOT NULL,
+  Phone varchar(32) NOT NULL,
   Employee_Id varchar(20) NOT NULL,
   UNIQUE KEY uq_center_username (Username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
