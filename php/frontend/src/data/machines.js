@@ -60,7 +60,7 @@ export const actionCards = [
     },
     {
         id: 'reports',
-        title: 'รายงานปัญหา',
+        title: 'รายงานปัญหาเกี่ยวกับเครื่องจักร',
         cta: 'รายงานปัญหา',
         icon: 'https://cdn-icons-png.flaticon.com/512/1828/1828911.png',
         description: 'รายงานปัญหาหรือข้อเสนอแนะต่างๆ',

@@ -285,7 +285,7 @@ export default function UsersDirectory() {
                     <div className="page-banner__content">
                         <p className="admin-eyebrow page-banner__eyebrow">ฐานข้อมูลผู้ใช้งาน</p>
                         <h1 className="page-banner__title">ภาพรวมผู้ใช้งาน</h1>
-                        <p className="page-banner__subtitle">ตรวจสอบสถานะผู้ใช้งานและจัดการสิทธิ์จากทุกศูนย์ได้ในหน้าจอเดียว</p>
+                        <p className="page-banner__subtitle">ตรวจสอบสถานะผู้ใช้งานและจัดการสิทธิ์</p>
                     </div>
                     <div className="page-banner__actions admin-hero-actions">
                         <button className="button ghost" type="button" onClick={() => navigate('/admin')}>

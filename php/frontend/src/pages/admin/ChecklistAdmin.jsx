@@ -506,8 +506,8 @@ export default function ChecklistAdmin() {
                 <section className="admin-hero-banner">
                     <div className="page-banner__content">
                         <p className="admin-eyebrow page-banner__eyebrow">ศูนย์ข้อมูลตรวจเช็ก</p>
-                        <h1 className="page-banner__title">เช็กลิสต์เครื่องจักร</h1>
-                        <p className="page-banner__subtitle">ค้นหาแบบฟอร์มด้วยเดือน รหัสรถ และสถานที่ ก่อนส่งออกหรือดูรายละเอียด</p>
+                        <h1 className="page-banner__title">เช็กลิสต์เครื่องจักร (ADMIN)</h1>
+                        <p className="page-banner__subtitle">ตรวจสอบข้อมูลการเช็กลิสต์เครื่องจักรทั้งหมด</p>
                     </div>
                     <div className="admin-hero-actions page-banner__actions">
                         <button type="button" className="button ghost" onClick={() => navigate('/admin')}>

@@ -148,6 +148,20 @@ export default function UsersAdmin() {
     };
 
     const handleRolesSelectChange = (event) => {
+        // Support both the old <select multiple> and the new checkbox inputs
+        if (event.target.type === 'checkbox') {
+            const roleValue = event.target.value;
+            const checked = event.target.checked;
+            setForm((prev) => {
+                const prevRoles = Array.isArray(prev.roles) ? [...prev.roles] : [];
+                const nextRoles = checked
+                    ? Array.from(new Set([...prevRoles, roleValue]))
+                    : prevRoles.filter((r) => r !== roleValue);
+                return { ...prev, roles: nextRoles };
+            });
+            clearFieldError('roles');
+            return;
+        }
         const selectedRoles = Array.from(event.target.selectedOptions || []).map((option) => option.value);
         setForm((prev) => ({ ...prev, roles: selectedRoles }));
         clearFieldError('roles');
@@ -247,7 +261,7 @@ export default function UsersAdmin() {
     const formTitle = isEditing ? 'แก้ไขผู้ใช้งาน' : 'เพิ่มผู้ใช้งาน';
     const formSubtitle = isEditing
         ? 'แก้ไขรายละเอียดผู้ใช้งานที่เลือกจากรายชื่อทั้งหมด'
-        : 'ระบุรายละเอียดผู้ใช้งานที่ต้องการเชิญ';
+        : 'ระบุรายละเอียดผู้ใช้งานใหม่เพื่อลงทะเบียนเข้าสู่ระบบ';
     const submitLabel = isEditing ? 'บันทึกการแก้ไข' : 'บันทึกผู้ใช้งาน';
     const resetLabel = isEditing ? 'คืนค่าแบบฟอร์ม' : 'ล้างฟอร์ม';
 
@@ -258,7 +272,7 @@ export default function UsersAdmin() {
                     <div className="page-banner__content">
                         <p className="admin-eyebrow page-banner__eyebrow">ศูนย์ควบคุมสิทธิ์</p>
                         <h1 className="page-banner__title">ศูนย์จัดการผู้ใช้งาน</h1>
-                        <p className="page-banner__subtitle">เพิ่มสิทธิ์ แก้ไขรายละเอียด และเชิญทีมงานเข้าสู่ระบบได้จากจุดเดียว</p>
+                        <p className="page-banner__subtitle">เพิ่มสิทธิ์ สมาชิกเข้าสู่ระบบ</p>
                     </div>
                     <div className="page-banner__actions admin-hero-actions">
                         <button className="button ghost" type="button" onClick={() => navigate('/admin')}>
@@ -376,22 +390,23 @@ export default function UsersAdmin() {
                         <span>
                             สิทธิ์ในระบบ <span className="required-mark">*</span>
                         </span>
-                        <select
-                            multiple
-                            size={Math.min(roleOptions.length, 6)}
-                            value={form.roles}
-                            onChange={handleRolesSelectChange}
-                            style={{ minHeight: 140 }}
-                        >
-                            {roleOptions.map((role) => (
-                                <option key={role.value} value={role.value}>
-                                    {role.label}
-                                </option>
-                            ))}
-                        </select>
-                        <small className="muted" style={{ display: 'block', marginTop: 4 }}>
-                            กด Ctrl (หรือ Cmd บน Mac) เพื่อเลือกได้หลายบทบาท
-                        </small>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                            {roleOptions.map((role) => {
+                                const id = `role_${role.value}`;
+                                return (
+                                    <label key={role.value} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <input
+                                            id={id}
+                                            type="checkbox"
+                                            value={role.value}
+                                            checked={Array.isArray(form.roles) && form.roles.includes(role.value)}
+                                            onChange={handleRolesSelectChange}
+                                        />
+                                        <span>{role.label}</span>
+                                    </label>
+                                );
+                            })}
+                        </div>
                         {formErrors.roles && <small className="error-row">{formErrors.roles}</small>}
                     </label>
 

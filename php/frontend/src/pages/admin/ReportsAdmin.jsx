@@ -370,8 +370,8 @@ export default function ReportsAdmin() {
                 <section className="page-banner page-banner--admin admin-reports-hero">
                     <div className="page-banner__content">
                         <p className="admin-eyebrow page-banner__eyebrow">ศูนย์รายงานเหตุขัดข้อง</p>
-                        <h1 className="page-banner__title">รายงานปัญหา (Admin)</h1>
-                        <p className="page-banner__subtitle">ติดตามสถานะการแจ้งซ่อมแบบเรียลไทม์และอัปเดตกลับไปยังศูนย์</p>
+                        <h1 className="page-banner__title">รายงานปัญหา (ADMIN)</h1>
+                        <p className="page-banner__subtitle">ติดตามปัญหาและอัปเดตสถานะรายงาน</p>
                     </div>
                     <div className="page-banner__actions admin-hero-actions">
                         <button type="button" className="button ghost" onClick={() => navigate('/admin')}>

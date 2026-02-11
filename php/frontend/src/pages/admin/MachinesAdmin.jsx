@@ -312,8 +312,8 @@ export default function MachinesAdmin() {
                     <section className="page-banner page-banner--admin admin-machines-hero">
                         <div className="page-banner__content">
                             <p className="admin-eyebrow page-banner__eyebrow">ศูนย์ข้อมูลเครื่องจักร</p>
-                            <h1 className="page-banner__title">หมวดหมู่เครื่องจักร (Admin)</h1>
-                            <p className="page-banner__subtitle">เลือกหมวดหมู่เพื่อลงลึกจัดการคลาสและรายละเอียดเครื่องจักรทั้งหมด</p>
+                            <h1 className="page-banner__title">หมวดหมู่เครื่องจักร (ADMIN)</h1>
+                            <p className="page-banner__subtitle">แก้ไขข้อมูลและตรวจสอบเครื่องจักรทั้งหมด</p>
                         </div>
                         <div className="page-banner__actions admin-hero-actions">
                             <button className="button ghost" type="button" onClick={() => navigate('/admin')}>
@@ -502,7 +502,7 @@ export default function MachinesAdmin() {
                                         <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
                                             <button className="button primary" onClick={handleSave}>บันทึก</button>
                                             <button className="button" onClick={handleCancel}>ยกเลิก</button>
-                                            <button className="button ghost" onClick={() => handleDelete(machine)}>ลบ</button>
+                                            <button className="button primary" onClick={() => handleDelete(machine)}>ลบ</button>
                                         </div>
                                     </>
                                 ) : (
@@ -519,7 +519,7 @@ export default function MachinesAdmin() {
                                         </div>
                                         <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
                                             {isAdminView && (
-                                                <button className="button ghost" onClick={() => handleDelete(machine)}>ลบ</button>
+                                                <button className="button primary" onClick={() => handleDelete(machine)}>ลบ</button>
                                             )}
                                         </div>
                                     </>

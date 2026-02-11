@@ -393,8 +393,8 @@ export default function OilLogsAdmin() {
                 <section className="page-banner page-banner--admin admin-oil-hero">
                     <div className="page-banner__content">
                         <p className="admin-eyebrow page-banner__eyebrow">ศูนย์ข้อมูลน้ำมัน</p>
-                        <h1 className="page-banner__title">หลังบ้าน · บันทึกน้ำมัน</h1>
-                        <p className="page-banner__subtitle">ตรวจสอบรายการเบิกน้ำมันแบบเรียลไทม์ พร้อมสรุปปริมาณและส่งออกไฟล์ได้</p>
+                        <h1 className="page-banner__title">บันทึกน้ำมัน (ADMIN)</h1>
+                        <p className="page-banner__subtitle">ตรวจสอบรายการน้ำมันและสรุปปริมาณ</p>
                     </div>
                     <div className="page-banner__actions admin-hero-actions">
                         <button type="button" className="button ghost" onClick={() => navigate('/admin')}>
@@ -485,7 +485,7 @@ export default function OilLogsAdmin() {
                                             </td>
                                             <td>{row.Project_Name || '-'}</td>
                                             <td>
-                                                <span>{row.Shift || '-'}</span>
+                                                <span>{row.Shift || ''}</span>
                                                 <span className="muted">{row.Work_Type || '-'}</span>
                                             </td>
                                             <td>{row.Operator_Name || row.Requester_Name || '-'}</td>

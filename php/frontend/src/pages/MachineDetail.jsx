@@ -76,6 +76,30 @@ const normalizeMachine = (input) => {
     return normalized;
 };
 
+const formatDate = (value) => {
+    if (!value && value !== 0) return null;
+    const str = String(value).trim();
+    if (!str) return null;
+    // Try native Date parsing first
+    let d = new Date(str);
+    if (isNaN(d)) {
+        // Try YYYY-MM-DD or YYYY/MM/DD
+        const m1 = str.match(/^(\d{4})[-:\/](\d{1,2})[-:\/](\d{1,2})/);
+        if (m1) {
+            const [_, y, mo, da] = m1;
+            d = new Date(Number(y), Number(mo) - 1, Number(da));
+        }
+    }
+    if (isNaN(d)) return str;
+    try {
+        const fmt = new Intl.DateTimeFormat('th-TH-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
+        return fmt.format(d);
+    } catch {
+        // fallback
+        return d.toLocaleDateString();
+    }
+};
+
 export default function MachineDetail() {
     const params = useParams();
     const [searchParams] = useSearchParams();
@@ -234,9 +258,9 @@ export default function MachineDetail() {
         { label: 'ภาษี', value: machine?.Duties ? `${machine.Duties} บาท` : '-' },
         { label: 'บันทึกเพิ่ม', value: machine?.Note ?? '-' },
         { label: 'บริษัทผู้ผลิต', value: machine?.Manufacture ?? '-' },
-        { label: 'ประกันภัย', value: machine?.Insurance ?? '-' },
-        { label: 'วันสิ้นสุดภาษี', value: machine?.Tax ?? '-' },
-        { label: 'วันที่จดทะเบียน', value: machine?.Registered ?? machine?.MCCreated_at ?? '-' },
+        { label: 'ประกันภัย', value: formatDate(machine?.Insurance) || (machine?.Insurance ? machine.Insurance : '-') },
+        { label: 'วันสิ้นสุดภาษี', value: formatDate(machine?.Tax) || (machine?.Tax ? machine.Tax : '-') },
+        { label: 'วันที่จดทะเบียน', value: formatDate(machine?.Registered || machine?.MCCreated_at) || (machine?.Registered || machine?.MCCreated_at ? (machine?.Registered || machine?.MCCreated_at) : '-') },
     ];
 
     const { imageForType, machineTypeTitle } = useMemo(() => {
@@ -513,7 +537,7 @@ export default function MachineDetail() {
                                 <div key={idx} style={{ textAlign: 'center' }}>
                                     <img src={img.url} alt={img.filename || `img-${idx}`} style={{ width: 120, height: 80, objectFit: 'cover', display: 'block' }} />
                                     <div style={{ marginTop: 4 }}>
-                                        <button className="button ghost" onClick={() => handleDeleteImage(img)}>ลบ</button>
+                                        <button className="button primary" onClick={() => handleDeleteImage(img)}>ลบ</button>
                                     </div>
                                 </div>
                             ))}

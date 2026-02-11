@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { actionCards as defaultActionCards } from '../../data/machines.js';
 
 export default function AdminDashboard() {
     const navigate = useNavigate();
@@ -18,7 +19,6 @@ export default function AdminDashboard() {
 
     const handleLogout = async (e) => {
         e?.preventDefault();
-        // call shared logout so app state updates immediately
         try {
             await logout();
         } catch (err) {
@@ -41,7 +41,7 @@ export default function AdminDashboard() {
                         </button>
                     </div>
                 </div>
-        
+
                 <section className="action-card-grid">
                     {actionCards.map((card) => (
                         <button type="button" className="action-card" key={card.id} onClick={() => navigate(card.to)}>

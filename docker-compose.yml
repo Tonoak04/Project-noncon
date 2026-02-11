@@ -5,6 +5,7 @@ services:
     image: mysql:8.0
     restart: always
     environment:
+      TZ: Asia/Bangkok
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: project_noncon
       MYSQL_USER: project_user
@@ -29,6 +30,7 @@ services:
     depends_on:
       - db
     environment:
+      TZ: Asia/Bangkok
       DB_HOST: db
       DB_DATABASE: project_noncon
       DB_USERNAME: root
@@ -45,6 +47,7 @@ services:
     depends_on:
       - db
     environment:
+      TZ: Asia/Bangkok
       PMA_HOST: db
       PMA_USER: root
       PMA_PASSWORD: rootpassword

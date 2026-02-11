@@ -16,10 +16,22 @@ const normalizeUserRecord = (userObj) => {
         .filter(Boolean);
     const roles = normalizedRoles.length ? normalizedRoles : ['operator'];
     const primaryRole = roles[0];
+    const nameParts = [];
+    if (userObj.displayName) {
+        nameParts.push(userObj.displayName);
+    } else {
+        if (userObj.name) nameParts.push(userObj.name);
+        if (userObj.lastname) nameParts.push(userObj.lastname);
+    }
+    const fullName = nameParts.length ? nameParts.join(' ').trim() : (userObj.fullName || userObj.displayName || userObj.username || userObj.Username || '');
+    const centerName = userObj.centerName || userObj.CenterName || '';
+
     return {
         ...userObj,
         role: userObj.role || primaryRole,
         roles,
+        fullName,
+        centerName,
     };
 };
 
@@ -28,7 +40,7 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [shouldResetRedirect, setShouldResetRedirect] = useState(false);
     const [lastLogoutReason, setLastLogoutReason] = useState(null);
-    const INACTIVITY_MS = 10 * 60 * 1000; // 10 minutes
+    const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
     const activityEvents = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
 
     const markActiveSession = (userObj) => {
@@ -58,21 +70,18 @@ export function AuthProvider({ children }) {
         })();
     }, []);
 
-    // client-side inactivity watcher: auto-logout after 10 minutes of no interaction
+    // client-side inactivity watcher: auto-logout after 30 minutes of no interaction
     useEffect(() => {
         if (!isAuthenticated) return undefined;
         let timer = null;
         const reset = () => {
             if (timer) clearTimeout(timer);
             timer = setTimeout(() => {
-                // perform logout when inactivity timeout reached
                 logout('timeout').catch(() => {});
             }, INACTIVITY_MS);
         };
 
-        // attach listeners
         activityEvents.forEach((ev) => window.addEventListener(ev, reset));
-        // start timer
         reset();
 
         return () => {
