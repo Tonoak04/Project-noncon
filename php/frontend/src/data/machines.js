@@ -67,6 +67,15 @@ export const actionCards = [
         to: '/reports',
     },
     {
+    id: 'machine-work',
+    title: 'แบบฟอร์มบันทึกงานเครื่องจักร',
+    cta: 'เปิดฟอร์ม',
+    icon: 'https://cdn-icons-png.flaticon.com/512/942/942748.png',
+    description: 'บันทึกงานที่ปฏิบัติกับเครื่องจักร',
+    to: '/machine-work',
+},
+
+    {
         id: 'checklist',
         title: 'แบบฟอร์มตรวจเช็ก',
         cta: 'เปิดฟอร์ม',

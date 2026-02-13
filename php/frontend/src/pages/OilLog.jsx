@@ -10,6 +10,7 @@ import {
     fuelCategories,
     createFuelDetailsState,
 } from '../data/oilLog.js';
+import { BASE_DEPARTMENT_OPTIONS } from './checklistShared.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 
@@ -337,6 +338,8 @@ export default function OilLog() {
     const [form, setForm] = useState(() => createDefaultForm(operatorDefaults));
     const [approvalOrigin] = useState(() => resolveApprovalOrigin());
     const [machines, setMachines] = useState([]);
+    const [projectOptions, setProjectOptions] = useState([]);
+    const [projectIsOther, setProjectIsOther] = useState(false);
     const [logs, setLogs] = useState([]);
     const [summary, setSummary] = useState({ count: 0, total_liters: 0 });
     const [loadingLogs, setLoadingLogs] = useState(true);
@@ -513,9 +516,17 @@ export default function OilLog() {
                 }));
                 setMachines(normalized);
             } catch (_) {
-                // silently ignore; users can type manually
             }
         })();
+    }, []);
+
+    useEffect(() => {
+        try {
+            const list = Array.isArray(BASE_DEPARTMENT_OPTIONS) ? BASE_DEPARTMENT_OPTIONS.slice() : [];
+            setProjectOptions(list);
+        } catch (_) {
+            setProjectOptions([]);
+        }
     }, []);
 
     useEffect(() => {
@@ -1115,11 +1126,38 @@ export default function OilLog() {
                         <div className="grid three-cols">
                             <label>
                                 โครงการ/หน่วยงาน
-                                <input type="text" value={form.projectName} onChange={handleChange('projectName')} placeholder="เช่น โครงการทางด่วน" required/>
+                                {projectOptions.length ? (
+                                    <>
+                                        <select
+                                            value={projectIsOther ? '__other__' : (form.projectName || '')}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                if (v === '__other__') {
+                                                    setProjectIsOther(true);
+                                                    setForm((p) => ({ ...p, projectName: '' }));
+                                                } else {
+                                                    setProjectIsOther(false);
+                                                    setForm((p) => ({ ...p, projectName: v }));
+                                                }
+                                            }}
+                                            required
+                                        >
+                                            <option value="">เลือกโครงการ/หน่วยงาน</option>
+                                            {projectOptions.map((name) => (
+                                                <option key={name} value={name}>{name}</option>
+                                            ))}
+                                        </select>
+                                        {projectIsOther && (
+                                            <input type="text" value={form.projectName} onChange={handleChange('projectName')} placeholder="พิมพ์ชื่อโครงการ/หน่วยงาน" required />
+                                        )}
+                                    </>
+                                ) : (
+                                    <input type="text" value={form.projectName} onChange={handleChange('projectName')} placeholder="เช่น โครงการทางด่วน" required/>
+                                )}
                             </label>
                             <label>
-                                สถานที่
-                                <input type="text" value={form.locationName} onChange={handleChange('locationName')} placeholder="เช่น ไซต์ A" required/>
+                                ปั้มน้ำมันในบริษัท/ภายนอก
+                                <input type="text" value={form.locationName} onChange={handleChange('locationName')} placeholder="เช่น ปั๊มบางจาก สาขาอโศก" required/>
                             </label>
                         </div>
                         <header>
@@ -1183,7 +1221,8 @@ export default function OilLog() {
                                     </div>
                                 </label>
                             </div>
-                            <div className="grid two-cols operation-grid">
+                            {/* ไปหน้าเครื่องจักร */}
+                            {/* <div className="grid two-cols operation-grid">
                                 <label>
                                     รายละเอียดการทำงาน
                                     <textarea rows="4" value={form.operationDetails} onChange={handleChange('operationDetails')} placeholder="เช่น ส่งของ" />
@@ -1192,7 +1231,7 @@ export default function OilLog() {
                                     WBS / รหัสงาน
                                     <input type="text" value={form.workOrder} onChange={handleChange('workOrder')} placeholder="เช่น โครงการสร้างสะพาน" />
                                 </label>
-                            </div>
+                            </div> */}
 
                         <header>
                             <h3>ประเภทและปริมาณน้ำมัน</h3>
@@ -1270,8 +1309,8 @@ export default function OilLog() {
                                 <input type="text" value={form.notes} onChange={handleChange('notes')} placeholder="เช่น เติมสำรอง" />
                             </label>
                         </div>
-
-                        <header>
+                            {/* เอาออกไปอยู่กับประจำวัน */}
+                        {/* <header>
                             <h3>มิเตอร์หัวจ่ายน้ำมัน</h3>
                             <p>คัดลอกตัวเลขจากมิเตอร์หัวจ่ายก่อน/หลังการทำงาน เพื่อคำนวณจำนวนที่ใช้จริง</p>
                         </header>
@@ -1288,9 +1327,9 @@ export default function OilLog() {
                                 รวม (หน่วยมิเตอร์)
                                 <input type="number" inputMode="decimal" step="0.01" value={form.workMeterTotal} onChange={handleChange('workMeterTotal')} />
                             </label>
-                        </div>
-
-                        <header>
+                        </div> */}
+                        {/* เอาไปใว้ในเช็คประจำวัน */}
+                        {/* <header>
                             <h3>เวลาปฏิบัติงานตามช่วง</h3>
                             <p>แยกเวลาปฏิบัติงานเป็นเช้า บ่าย และ OT ตามแบบฟอร์ม</p>
                         </header>
@@ -1308,10 +1347,7 @@ export default function OilLog() {
                                         <label className="time-field">
                                             <span>เริ่มงาน</span>
                                             <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                pattern="[0-9:]*"
-                                                autoComplete="off"
+                                                type="time"
                                                 value={form[startField]}
                                                 onChange={handleTimeFieldChange(segment.key, 'start')}
                                             />
@@ -1319,10 +1355,7 @@ export default function OilLog() {
                                         <label className="time-field">
                                             <span>เลิกงาน</span>
                                             <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                pattern="[0-9:]*"
-                                                autoComplete="off"
+                                                type="time"
                                                 value={form[endField]}
                                                 onChange={handleTimeFieldChange(segment.key, 'end')}
                                             />
@@ -1330,11 +1363,7 @@ export default function OilLog() {
                                         <label className="time-field">
                                             <span>รวม (ชม.)</span>
                                             <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                pattern="[0-9:]*"
-                                                placeholder="0:00"
-                                                autoComplete="off"
+                                                type="time"
                                                 value={form[totalField]}
                                                 onChange={handleTimeFieldChange(segment.key, 'total')}
                                             />
@@ -1346,9 +1375,9 @@ export default function OilLog() {
                         <div className="time-total-pill" aria-live="polite">
                             <span>รวมเวลาทั้งหมด</span>
                             <strong>{formattedTotalWorkHours} ชม.</strong>
-                        </div>
-
-                        <header>
+                        </div> */}
+                        {/* ไปหน้าเครืองจักร */}
+                        {/* <header>
                             <h3>ชั่วโมงเครื่อง / เลขไมล์</h3>
                         </header>
                         <div className="grid two-cols">
@@ -1360,7 +1389,7 @@ export default function OilLog() {
                                 เลขกิโลเมตร (KM)
                                 <input type="number" inputMode="decimal" step="0.1" value={form.odometerStart} onChange={handleChange('odometerStart')} />
                             </label>
-                        </div>
+                        </div> */}
 
                         <header>
                             <h3>ผู้รับผิดชอบ</h3>
@@ -1428,8 +1457,9 @@ export default function OilLog() {
                                 </p>
                             </div>
                         </div>
-
-                        <header>
+                        
+                        {/* ไปหน้าเครื่องจักร */}
+                        {/* <header>
                             <h3>รายการตรวจเช็คเครื่องจักร</h3>    
                         </header>
                         <div className="checklist-grid">
@@ -1487,19 +1517,18 @@ export default function OilLog() {
                                     </div>
                                 );
                             })}
-                        </div>
+                        </div> */}
 
                         <header>
                             <h3>รูปภาพประกอบ</h3>
                             <p>แนบหลักฐานการเติมน้ำมันอย่างน้อย 1 รูป</p>
-                            
-                            {/* เล่นๆโดนด่าก่อนเดี๋ยวมาลบ */}
+
                             <p>
                             <img src={oil} alt="oil" style={{maxWidth: '300px', display: 'block', marginTop: '8px', marginLeft: 'auto', marginRight: 'auto'}} 
                             />
                             </p>
                             <p style={{marginRight:'auto', marginLeft:'auto' , maxWidth:'100px' , color:'black'}}>ภาพประกอบ</p>
-                        
+
                         </header>
                         <div className="photo-upload-card">
                             <label className="photo-upload-field">

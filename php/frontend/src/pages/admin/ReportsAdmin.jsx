@@ -587,7 +587,7 @@ export default function ReportsAdmin() {
                                                 rows="3"
                                                 value={remarkDraft}
                                                 onChange={(event) => setRemarkDraft(event.target.value)}
-                                                placeholder="สรุปการแก้ไขหรือแจ้งเตือนทีมที่เกี่ยวข้อง"
+                                                placeholder="สรุปการแก้ไขหรือแจ้งเตือนทีม(หลังบ้าน)"
                                                 disabled={!hasAvailableStatus}
                                             />
                                         </label>

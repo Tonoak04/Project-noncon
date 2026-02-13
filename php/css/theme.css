@@ -404,6 +404,48 @@ header[class*="admin-"][class*="-hero"] {
     background: linear-gradient(180deg, rgba(7, 18, 30, 0) 20%, rgba(7, 18, 30, 0.8) 100%);
 }
 
+/* Machine picker styles (match OilLog) */
+.picker-options {
+    position: absolute;
+    z-index: 40;
+    background: #fff;
+    border: 1px solid rgba(15, 35, 58, 0.08);
+    box-shadow: 0 8px 24px rgba(2,6,23,0.08);
+    width: 100%;
+    max-height: 320px;
+    overflow: auto;
+    border-radius: 10px;
+    margin-top: 6px;
+}
+.picker-option {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+}
+.picker-option:hover {
+    background: #f5f7fb;
+}
+.picker-option.active,
+.picker-option[aria-selected="true"] {
+    background: #0f3e68;
+    color: #fff;
+}
+.picker-option strong {
+    display: block;
+    font-weight: 600;
+}
+.picker-option span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 .hero-content {
     position: relative;
     z-index: 1;
@@ -2514,6 +2556,69 @@ header[class*="admin-"][class*="-hero"] {
 .oil-log-form textarea {
     resize: vertical;
     min-height: 120px;
+}
+
+/* Dynamic WBS / workOrders list styles */
+.dynamic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 0.45rem;
+}
+.dynamic-list__row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+}
+.dynamic-list__row input {
+    flex: 1;
+    padding: 0.6rem 0.85rem;
+    border-radius: 12px;
+    border: 1px solid #e6eef8;
+    background: #ffffff;
+    box-shadow: 0 6px 18px rgba(15, 35, 58, 0.04);
+    font-size: 0.98rem;
+}
+.dynamic-list__row .small,
+.dynamic-list button.small {
+    background: transparent;
+    border: 1px solid rgba(15, 35, 58, 0.06);
+    color: var(--text-primary);
+    padding: 0.45rem 0.6rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.dynamic-list__row .small:hover,
+.dynamic-list button.small:hover {
+    background: rgba(31, 120, 209, 0.06);
+}
+.dynamic-list > div > button {
+    margin-top: 0.2rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 10px;
+    border: 1px dashed rgba(15, 35, 58, 0.06);
+    background: transparent;
+    color: var(--accent);
+    font-weight: 700;
+    cursor: pointer;
+}
+.dynamic-list > div > button:hover {
+    background: rgba(31, 120, 209, 0.06);
+}
+
+/* Small visual tweaks for the machine work page */
+.machine-name-display {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.machine-name-display strong {
+    font-size: 1rem;
+}
+.machine-name-display span {
+    color: var(--text-muted);
+    font-size: 0.92rem;
 }
 
 .grid {

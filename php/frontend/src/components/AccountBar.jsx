@@ -22,7 +22,6 @@ export default function AccountBar() {
         setMenuOpen(false);
     }, [location.pathname]);
 
-    // If auth says we're authenticated but `user` is not yet populated, try fetching /api/me.php
     useEffect(() => {
         if (!isAuthenticated || user) return undefined;
         let mounted = true;

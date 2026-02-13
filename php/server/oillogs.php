@@ -171,7 +171,6 @@ function ensure_oillog_approval_record(PDO $pdo, int $oilLogId): array
 {
     $token = generate_oillog_approval_token($pdo);
     $expiresAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
-    // TODO(enforce-expiry): Honor Token_Expires_At (~10 minutes) during approval validation.
     $stmt = $pdo->prepare(
         'INSERT INTO OilLogApproval (OilLog_Id, Approval_Token, Token_Expires_At)
         VALUES (:oilLogId, :token, :expires)
@@ -420,8 +419,6 @@ function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
         log.OilLog_Id,
         log.Document_No,
         log.Document_Date,
-        log.Shift,
-        log.Work_Type,
         log.Work_Order,
         log.Project_Name,
         log.Location_Name,
@@ -620,8 +617,6 @@ function handle_oillog_post(): void
     }
 
     $documentDate = normalize_datetime($payload['documentDate'] ?? date('Y-m-d H:i:s'));
-    $shift = normalize_string($payload['shift'] ?? null, 20);
-    $workType = normalize_string($payload['workType'] ?? null, 30);
     $workOrder = normalize_string($payload['workOrder'] ?? null, 100);
     $projectName = normalize_string($payload['projectName'] ?? null, 255);
     $locationName = normalize_string($payload['locationName'] ?? null, 255);
@@ -819,13 +814,11 @@ function handle_oillog_post(): void
             return;
         }
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('INSERT INTO OilLog (Center_Id, Document_No, Document_Date, Shift, Work_Type, Work_Order, Project_Name, Location_Name, Requester_Name, Supervisor_Name, Machine_Code, Machine_Name, Machine_Description, Operation_Details, Fuel_Type, Fuel_Amount_Liters, Fuel_Details_JSON, Fuel_Ticket_No, Tank_Before_Liters, Tank_After_Liters, Meter_Hour_Start, Meter_Hour_End, Odometer_Start, Odometer_End, Work_Meter_Start, Work_Meter_End, Work_Meter_Total, Time_Morning_Start, Time_Morning_End, Time_Morning_Total, Time_Afternoon_Start, Time_Afternoon_End, Time_Afternoon_Total, Time_Ot_Start, Time_Ot_End, Time_Ot_Total, Fuel_Time, Operator_Name, Assistant_Name, Recorder_Name, Notes, Checklist_JSON, Created_By) VALUES (:center_id, :document_no, :document_date, :shift, :work_type, :work_order, :project_name, :location_name, :requester_name, :supervisor_name, :machine_code, :machine_name, :machine_description, :operation_details, :fuel_type, :fuel_amount, :fuel_details, :fuel_ticket, :tank_before, :tank_after, :meter_start, :meter_end, :km_start, :km_end, :work_meter_start, :work_meter_end, :work_meter_total, :time_morning_start, :time_morning_end, :time_morning_total, :time_afternoon_start, :time_afternoon_end, :time_afternoon_total, :time_ot_start, :time_ot_end, :time_ot_total, :fuel_time, :operator_name, :assistant_name, :recorder_name, :notes, :checklist_json, :created_by)');
+        $stmt = $pdo->prepare('INSERT INTO OilLog (Center_Id, Document_No, Document_Date, Work_Order, Project_Name, Location_Name, Requester_Name, Supervisor_Name, Machine_Code, Machine_Name, Machine_Description, Operation_Details, Fuel_Type, Fuel_Amount_Liters, Fuel_Details_JSON, Fuel_Ticket_No, Tank_Before_Liters, Tank_After_Liters, Meter_Hour_Start, Meter_Hour_End, Odometer_Start, Odometer_End, Work_Meter_Start, Work_Meter_End, Work_Meter_Total, Time_Morning_Start, Time_Morning_End, Time_Morning_Total, Time_Afternoon_Start, Time_Afternoon_End, Time_Afternoon_Total, Time_Ot_Start, Time_Ot_End, Time_Ot_Total, Fuel_Time, Operator_Name, Assistant_Name, Recorder_Name, Notes, Checklist_JSON, Created_By) VALUES (:center_id, :document_no, :document_date, :work_order, :project_name, :location_name, :requester_name, :supervisor_name, :machine_code, :machine_name, :machine_description, :operation_details, :fuel_type, :fuel_amount, :fuel_details, :fuel_ticket, :tank_before, :tank_after, :meter_start, :meter_end, :km_start, :km_end, :work_meter_start, :work_meter_end, :work_meter_total, :time_morning_start, :time_morning_end, :time_morning_total, :time_afternoon_start, :time_afternoon_end, :time_afternoon_total, :time_ot_start, :time_ot_end, :time_ot_total, :fuel_time, :operator_name, :assistant_name, :recorder_name, :notes, :checklist_json, :created_by)');
         $stmt->execute([
             ':center_id' => $user['Center_Id'] ?? null,
             ':document_no' => $documentNo,
             ':document_date' => $documentDate,
-            ':shift' => $shift,
-            ':work_type' => $workType,
             ':work_order' => $workOrder,
             ':project_name' => $projectName,
             ':location_name' => $locationName,

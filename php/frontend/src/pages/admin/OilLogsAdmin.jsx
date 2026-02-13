@@ -203,7 +203,7 @@ export default function OilLogsAdmin() {
 
     const exportCsv = () => {
         if (!items.length) return;
-        const headers = ['Document Date', 'Document No', 'Machine', 'Project', 'Fuel Type', 'Liters', 'Work Type', 'Operator', 'Assistant', 'Recorder', 'Ticket', 'Created', 'Fuel Meter Start', 'Fuel Meter End', 'Fuel Meter Total', 'Morning Hours', 'Afternoon Hours', 'OT Hours'];
+        const headers = ['Document Date', 'Document No', 'Machine', 'Project', 'Fuel Type', 'Liters', 'Operator', 'Assistant', 'Recorder', 'Ticket', 'Created', 'Fuel Meter Start', 'Fuel Meter End', 'Fuel Meter Total', 'Morning Hours', 'Afternoon Hours', 'OT Hours'];
         const rows = items.map((row) => {
             const assistantDisplay = row.Assistant_Name || row.Approval_Inspector_Name || row.Requester_Name || '';
             const recorderDisplay = row.Recorder_Name || row.Approval_Oiler_Name || '';
@@ -214,7 +214,6 @@ export default function OilLogsAdmin() {
                 row.Project_Name || '',
                 row.Fuel_Type || '',
                 row.Fuel_Amount_Liters || '',
-                row.Work_Type || '',
                 row.Operator_Name || row.Requester_Name || '',
                 assistantDisplay,
                 recorderDisplay,
@@ -252,7 +251,6 @@ export default function OilLogsAdmin() {
         if (!selected) return [];
         return [
             { label: 'วันที่', value: formatDateDMY(selected.Document_Date) },
-            { label: 'กะ / ประเภทงาน', value: `${selected.Shift || '-'} · ${selected.Work_Type || '-'}` },
             { label: 'รหัสเครื่อง', value: selected.Machine_Code || '-' },
             { label: 'รายละเอียดเครื่อง', value: selected.Machine_Description || selected.Machine_Name || '-' },
             { label: 'WBS / รหัสงาน', value: selected.Work_Order || '-' },
@@ -261,8 +259,8 @@ export default function OilLogsAdmin() {
             { label: 'ชั่วโมงเครื่อง', value: `${numberFormat(selected.Meter_Hour_Start)} → ${numberFormat(selected.Meter_Hour_End)}` },
             { label: 'เลขกิโลเมตร', value: `${numberFormat(selected.Odometer_Start)} → ${numberFormat(selected.Odometer_End)}` },
             { label: 'คงเหลือ', value: `${numberFormat(selected.Tank_Before_Liters)} → ${numberFormat(selected.Tank_After_Liters)} ลิตร` },
-            { label: 'ใบจ่ายน้ำมัน', value: selected.Fuel_Ticket_No || '-' },
-            { label: 'ผู้รับผิดชอบ', value: `${selected.Operator_Name || '-'} / ${selected.Assistant_Name || '-'}` },
+            // { label: 'ใบจ่ายน้ำมัน', value: selected.Fuel_Ticket_No || '-' },
+            // { label: 'ผู้รับผิดชอบ', value: `${selected.Operator_Name || '-'}` },
             { label: 'บันทึกโดย', value: selected.Recorder_Name || selected.Created_By || '-' },
         ];
     }, [selected]);
@@ -346,10 +344,6 @@ export default function OilLogsAdmin() {
             {
                 label: 'ปริมาณที่ใช้',
                 value: selected.Fuel_Amount_Liters ? `${numberFormat(selected.Fuel_Amount_Liters)} ลิตร` : '—',
-            },
-            {
-                label: 'กะ / ประเภทงาน',
-                value: `${selected.Shift || '-'} · ${selected.Work_Type || '-'}`,
             },
             {
                 label: 'ผู้ปฏิบัติงาน',
@@ -461,7 +455,6 @@ export default function OilLogsAdmin() {
                                         <th>เลขที่</th>
                                         <th>เครื่องจักร</th>
                                         <th>โครงการ</th>
-                                        <th>กะ / งาน</th>
                                         <th>ผู้ปฏิบัติงาน</th>
                                     </tr>
                                 </thead>
@@ -484,10 +477,6 @@ export default function OilLogsAdmin() {
                                                 <span className="muted">{row.Machine_Name || ''}</span>
                                             </td>
                                             <td>{row.Project_Name || '-'}</td>
-                                            <td>
-                                                <span>{row.Shift || ''}</span>
-                                                <span className="muted">{row.Work_Type || '-'}</span>
-                                            </td>
                                             <td>{row.Operator_Name || row.Requester_Name || '-'}</td>
                                         </tr>
                                     ))}

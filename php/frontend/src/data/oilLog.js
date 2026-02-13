@@ -25,7 +25,7 @@ export const oilChecklistItems = [
 export const oilTimeSegments = [
     { key: 'Morning', label: 'ช่วงเช้า'},
     { key: 'Afternoon', label: 'ช่วงบ่าย'},
-    { key: 'Ot', label: 'OT/เสริม'},
+    { key: 'Ot', label: 'OT'},
 ];
 
 export const createChecklistState = () => {

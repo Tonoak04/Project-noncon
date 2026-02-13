@@ -76,6 +76,8 @@ services:
     image: cloudflare/cloudflared:2024.11.0
     depends_on:
       - line-webhook
+    environment:
+      TZ: Asia/Bangkok
     command: tunnel --no-autoupdate --url http://line-webhook:8000
     restart: unless-stopped
 
