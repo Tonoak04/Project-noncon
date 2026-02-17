@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const OILER_ROLE_KEYS = ['oiler', 'oil', 'fuel', 'fueler', 'pump', 'recorder'];
+const INSPECTOR_ROLE_KEYS = ['inspector', 'assistant'];
 
 const userHasAnyRole = (user, roles) => {
     if (!user || !Array.isArray(roles) || roles.length === 0) {
@@ -20,33 +20,33 @@ const formatDate = (value) => {
     return new Date(parsed).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short', hour12: false });
 };
 
-const formatLiters = (value) => {
-    if (value === null || value === undefined) return '-';
-    const num = Number(value);
-    return Number.isFinite(num) ? `${num.toFixed(2)} ลิตร` : `${value} ลิตร`;
-};
-
-const resolveTankValue = (oilLog, key) => {
-    if (!oilLog) return null;
-    if (oilLog[key] !== undefined && oilLog[key] !== null) {
-        return oilLog[key];
-    }
-    const fallbackMap = {
-        tank_before_liters: 'fuel_before_liters',
-        tank_after_liters: 'fuel_after_liters',
-    };
-    const fallbackKey = fallbackMap[key];
-    if (fallbackKey && oilLog[fallbackKey] !== undefined) {
-        return oilLog[fallbackKey];
-    }
-    return null;
-};
-
 const formatName = (value) => {
     if (!value) {
         return 'ยังไม่ยืนยัน';
     }
     return value;
+};
+
+const formatWorkOrders = (orders) => {
+    if (Array.isArray(orders) && orders.length) {
+        return orders.join(', ');
+    }
+    return '-';
+};
+
+const formatWorkMeter = (value) => {
+    if (value === null || value === undefined || value === '') {
+        return '-';
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num.toFixed(2)} หน่วย` : String(value);
+};
+
+const formatChecklistItems = (items) => {
+    if (Array.isArray(items) && items.length) {
+        return items.join(', ');
+    }
+    return '-';
 };
 
 const approvalStyles = {
@@ -177,13 +177,13 @@ const ApprovalStatusChip = ({ label, approvedAt }) => {
     );
 };
 
-export default function OilApproval() {
+export default function MachineWorkApproval() {
     const location = useLocation();
     const navigate = useNavigate();
     const { user } = useAuth();
     const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-    const oilLogId = useMemo(() => {
-        const raw = params.get('oilLogId');
+    const machineWorkLogId = useMemo(() => {
+        const raw = params.get('machineWorkLogId');
         return raw ? Number(raw) : null;
     }, [params]);
     const token = useMemo(() => (params.get('token') || '').trim(), [params]);
@@ -191,13 +191,13 @@ export default function OilApproval() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [remark, setRemark] = useState('');
-    const [submittingRole, setSubmittingRole] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
 
-    const canApproveOiler = userHasAnyRole(user, OILER_ROLE_KEYS);
+    const canApproveInspector = userHasAnyRole(user, INSPECTOR_ROLE_KEYS);
 
     const fetchContext = async () => {
-        if (!oilLogId || !token) {
+        if (!machineWorkLogId || !token) {
             setError('ลิงก์ไม่ถูกต้อง');
             setLoading(false);
             return;
@@ -205,7 +205,7 @@ export default function OilApproval() {
         setLoading(true);
         setError('');
         try {
-            const data = await apiGet(`/api/oillog_approvals.php?oilLogId=${oilLogId}&token=${encodeURIComponent(token)}`);
+            const data = await apiGet(`/api/machine_work_log_approvals.php?machineWorkLogId=${machineWorkLogId}&token=${encodeURIComponent(token)}`);
             setContext(data);
         } catch (err) {
             setError(err.message || 'โหลดข้อมูลไม่สำเร็จ');
@@ -216,25 +216,23 @@ export default function OilApproval() {
 
     useEffect(() => {
         fetchContext();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [oilLogId, token]);
+    }, [machineWorkLogId, token]);
 
-    const handleConfirm = async (approvalType) => {
-        if (!context || !oilLogId || !token) {
+    const handleConfirm = async () => {
+        if (!context || !machineWorkLogId || !token) {
             return;
         }
-        setSubmittingRole(approvalType);
+        setSubmitting(true);
         setSuccessMessage('');
         setError('');
         try {
             const payload = {
                 action: 'confirm',
-                oilLogId,
+                machineWorkLogId,
                 token,
-                approvalType,
                 remark,
             };
-            const data = await apiPost('/api/oillog_approvals.php', payload);
+            const data = await apiPost('/api/machine_work_log_approvals.php', payload);
             setContext(data);
             setRemark('');
             setSuccessMessage('บันทึกการยืนยันเรียบร้อย');
@@ -243,43 +241,32 @@ export default function OilApproval() {
         } catch (err) {
             setError(err.message || 'ยืนยันไม่สำเร็จ');
         } finally {
-            setSubmittingRole('');
+            setSubmitting(false);
         }
     };
 
     const approval = context?.approval;
-    const oilLog = context?.oilLog;
-    const tankBefore = resolveTankValue(oilLog, 'tank_before_liters');
-    const tankAfter = resolveTankValue(oilLog, 'tank_after_liters');
-    const oilerDone = Boolean(approval?.oiler?.approved_at);
+    const machineWorkLog = context?.machineWorkLog;
     const inspectorDone = Boolean(approval?.inspector?.approved_at);
-    const statusTiles = [
-        {
-            key: 'oiler',
-            label: 'พนักงานออยเลอร์',
-            info: approval?.oiler,
-            done: oilerDone,
-        },
-    ];
 
     return (
         <div style={approvalStyles.page}>
             <header style={approvalStyles.hero}>
                 <div>
-                    <p className="muted">ยืนยันใบรายงานน้ำมัน</p>
-                    {oilLog ? (
-                        <h1>{oilLog.document_no || `OIL-${oilLog.id}`}</h1>
+                    <p className="muted">ยืนยันบันทึกการทำงานของเครื่องจักร</p>
+                    {machineWorkLog ? (
+                        <h1>{machineWorkLog.document_no || `MWL-${machineWorkLog.id}`}</h1>
                     ) : (
                         <h1>กำลังโหลด...</h1>
                     )}
-                    {oilLog && (
-                        <p className="muted">วันที่บันทึก {formatDate(oilLog.document_date)}</p>
+                    {machineWorkLog && (
+                        <p className="muted">วันที่บันทึก {formatDate(machineWorkLog.document_date)}</p>
                     )}
                 </div>
                 <Link style={approvalStyles.ghostLink} to="/worksite">กลับหน้าไซต์</Link>
             </header>
 
-            {!oilLogId || !token ? (
+            {!machineWorkLogId || !token ? (
                 <div style={{ ...approvalStyles.card, ...approvalStyles.errorCard }}>ไม่พบพารามิเตอร์ที่จำเป็น</div>
             ) : loading ? (
                 <div style={approvalStyles.card}>กำลังโหลดข้อมูล...</div>
@@ -293,33 +280,51 @@ export default function OilApproval() {
                             <h2>รายละเอียดใบงาน</h2>
                             <dl style={{ display: 'grid', gap: '12px' }}>
                                 <div>
-                                    <dt>โครงการ / ปั้มน้ำมัน</dt>
-                                    <dd>{oilLog.project_name || '-'} · {oilLog.location_name || '-'}</dd>
-                                </div>
-                                <div>
                                     <dt>เครื่องจักร</dt>
-                                    <dd>{oilLog.machine_code || '-'} · {oilLog.machine_name || '-'}</dd>
+                                    <dd>{machineWorkLog.machine_code || '-'} · {machineWorkLog.machine_name || '-'}</dd>
                                 </div>
                                 <div>
-                                    <dt>ประเภทน้ำมัน</dt>
-                                    <dd>{oilLog.fuel_type || '-'} ({formatLiters(oilLog.fuel_amount_liters)})</dd>
+                                    <dt>รายละเอียดการทำงาน</dt>
+                                    <dd>{machineWorkLog.operation_details || '-'}</dd>
                                 </div>
                                 <div>
-                                    <dt>ก่อนเติม</dt>
-                                    <dd>{formatLiters(tankBefore)}</dd>
+                                    <dt>WBS / รหัสงาน</dt>
+                                    <dd>{formatWorkOrders(machineWorkLog.work_orders)}</dd>
                                 </div>
                                 <div>
-                                    <dt>หลังเติม</dt>
-                                    <dd>{formatLiters(tankAfter)}</dd>
+                                    <dt>รวมมิเตอร์การทำงาน</dt>
+                                    <dd>{formatWorkMeter(machineWorkLog.work_meter_total)}</dd>
                                 </div>
                                 <div>
-                                    <dt>หมายเหตุ</dt>
-                                    <dd>{oilLog.notes || '-'}</dd>
+                                    <dt>รายการตรวจสอบ</dt>
+                                    <dd>{formatChecklistItems(machineWorkLog.checklist_items)}</dd>
+                                </div>
+                                <div>
+                                    <dt>ผู้บันทึก</dt>
+                                    <dd>{machineWorkLog.created_by || '-'}</dd>
                                 </div>
                             </dl>
                         </article>
                         <article style={approvalStyles.card}>
                             <h2>สถานะการยืนยัน</h2>
+                            <div style={approvalStyles.statusBoard}>
+                                <div style={{
+                                    ...approvalStyles.statusTile,
+                                    ...(inspectorDone ? approvalStyles.statusTileDone : {}),
+                                }}>
+                                    <span style={{
+                                        ...approvalStyles.statusBadge,
+                                        ...(inspectorDone ? approvalStyles.badgeDone : approvalStyles.badgeWaiting),
+                                    }}>
+                                        {inspectorDone ? 'ยืนยันแล้ว' : 'รอการยืนยัน'}
+                                    </span>
+                                    <strong>ผู้ตรวจสอบ</strong>
+                                    <span>{formatName(approval?.inspector?.full_name)}</span>
+                                    {approval?.inspector?.remark && (
+                                        <small>หมายเหตุ: {approval.inspector.remark}</small>
+                                    )}
+                                </div>
+                            </div>
                             <div style={approvalStyles.remarkArea}>
                                 <label>
                                     หมายเหตุ (ถ้ามี)
@@ -327,24 +332,23 @@ export default function OilApproval() {
                                         value={remark}
                                         onChange={(event) => setRemark(event.target.value)}
                                         maxLength={500}
-                                        placeholder="เช่น ระบุเวลาส่ง, สภาพเอกสาร"
+                                        placeholder="เช่น ระบุสถานะเครื่องจักร"
                                         style={approvalStyles.textarea}
                                     />
                                 </label>
                             </div>
                             <div style={approvalStyles.actions}>
-                                {canApproveOiler && (
+                                {canApproveInspector ? (
                                     <button
                                         type="button"
                                         className="button primary"
-                                        disabled={oilerDone || submittingRole === 'oiler'}
-                                        onClick={() => handleConfirm('oiler')}
+                                        disabled={inspectorDone || submitting}
+                                        onClick={handleConfirm}
                                     >
-                                        {oilerDone ? 'ยืนยันแล้ว' : (submittingRole === 'oiler' ? 'กำลังบันทึก...' : 'ยืนยัน (พนักงานออยเลอร์)')}
+                                        {inspectorDone ? 'ยืนยันแล้ว' : (submitting ? 'กำลังบันทึก...' : 'ยืนยัน (ผู้ตรวจสอบ)')}
                                     </button>
-                                )}
-                                {!canApproveOiler && (
-                                    <p className="muted small-text">บัญชีนี้ไม่มีสิทธิ์ยืนยันบทบาท</p>
+                                ) : (
+                                    <p className="muted small-text">บัญชีนี้ไม่มีสิทธิ์ยืนยันบทบาทผู้ตรวจสอบ</p>
                                 )}
                             </div>
                         </article>

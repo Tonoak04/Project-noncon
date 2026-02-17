@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import QRCode from 'qrcode';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiGet, apiPost } from '../api.js';
-import { oilTimeSegments,
+import {
+    oilTimeSegments,
     oilChecklistItems,
     createChecklistState,
     oilChecklistOtherId,
-    } from '../data/oilLog.js';
+} from '../data/oilLog.js';
 
 export default function MachineWorkLog() {
     const { user } = useAuth();
@@ -32,6 +34,255 @@ export default function MachineWorkLog() {
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
 
+    const operatorRoleKeys = ['operator', 'driver'];
+
+    const normalizeRoleList = (rolesInput) => {
+        if (!Array.isArray(rolesInput)) {
+            return [];
+        }
+        return rolesInput
+            .map((role) => (typeof role === 'string' ? role.trim().toLowerCase() : ''))
+            .filter(Boolean);
+    };
+
+    const userHasAnyRole = (userObj, expectedRoles) => {
+        if (!userObj || !Array.isArray(expectedRoles) || !expectedRoles.length) {
+            return false;
+        }
+        const source = Array.isArray(userObj.roles) && userObj.roles.length
+            ? userObj.roles
+            : (userObj.role ? [userObj.role] : []);
+        const normalized = normalizeRoleList(source);
+        return normalized.some((r) => expectedRoles.includes(r));
+    };
+
+    const resolveOperatorDefaults = (user) => {
+        if (!userHasAnyRole(user, operatorRoleKeys)) {
+            return { operatorName: '', operatorAccountId: null };
+        }
+        const preferredLabel = (user?.fullName || user?.displayName || '').trim();
+        const fallbackUsername = (user?.username || user?.Username || '').trim();
+        const composedName = [user?.name, user?.lastname]
+            .map((part) => (part || '').trim())
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+        const operatorName = preferredLabel || composedName || fallbackUsername;
+        const numericCenterId = Number(user?.Center_Id);
+        const operatorAccountId = Number.isFinite(numericCenterId) && numericCenterId > 0 ? numericCenterId : null;
+        return {
+            operatorName,
+            operatorAccountId,
+        };
+    };
+
+    const formatPersonnelOptionLabel = (option) => {
+        if (!option) return '';
+        const base = (option.fullName || option.username || '').trim();
+        const parts = [];
+        if (option.centerName) parts.push(option.centerName);
+        if (option.employeeId) parts.push(`#${option.employeeId}`);
+        return parts.length ? `${base || 'ไม่ระบุชื่อ'} · ${parts.join(' · ')}` : (base || 'ไม่ระบุชื่อ');
+    };
+
+    const APPROVAL_IP_HOST = '172.16.3.106';
+    const resolveApprovalOrigin = () => {
+        if (typeof window === 'undefined') return '';
+        const protocol = window.location?.protocol || 'http:';
+        const portSegment = window.location?.port ? `:${window.location.port}` : '';
+        return `${protocol}//${APPROVAL_IP_HOST}${portSegment}`;
+    };
+
+    const approvalModalStyles = {
+        backdrop: {
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            zIndex: 1000,
+        },
+        card: {
+            width: '100%',
+            maxWidth: '520px',
+            background: '#fff',
+            borderRadius: '20px',
+            padding: '28px',
+            boxShadow: '0 25px 60px rgba(15, 24, 56, 0.35)',
+            textAlign: 'center',
+            position: 'relative',
+        },
+        closeButton: {
+            position: 'absolute',
+            top: '14px',
+            right: '14px',
+            border: 'none',
+            background: 'transparent',
+            fontSize: '24px',
+            cursor: 'pointer',
+            lineHeight: 1,
+        },
+        qrImage: {
+            width: '100%',
+            maxWidth: '320px',
+            margin: '0 auto 16px auto',
+            display: 'block',
+        },
+        linkRow: {
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'stretch',
+            marginTop: '12px',
+        },
+        linkInput: {
+            flex: 1,
+            borderRadius: '10px',
+            border: '1px solid #d0d7de',
+            padding: '10px 12px',
+            fontSize: '14px',
+        },
+        copyButton: {
+            borderRadius: '10px',
+            border: 'none',
+            background: '#0b6efd',
+            color: '#fff',
+            padding: '0 16px',
+            fontWeight: 600,
+            cursor: 'pointer',
+        },
+        primaryButton: {
+            marginTop: '16px',
+            width: '100%',
+            borderRadius: '12px',
+            border: 'none',
+            background: '#111b47',
+            color: '#fff',
+            padding: '12px 16px',
+            fontSize: '16px',
+            fontWeight: 600,
+            cursor: 'pointer',
+        },
+        secondaryButton: {
+            marginTop: '12px',
+            width: '100%',
+            borderRadius: '12px',
+            border: '1px solid #d0d7de',
+            background: '#f5f7fb',
+            color: '#111b47',
+            padding: '12px 16px',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
+        },
+        feedbackText: {
+            marginTop: '8px',
+            fontSize: '13px',
+            color: '#198754',
+        },
+    };
+
+    const [approvalPreview, setApprovalPreview] = useState({ visible: false, url: '', token: '', expiresAt: '', oilLogId: null });
+    const [approvalCopyFeedback, setApprovalCopyFeedback] = useState('');
+    const [approvalQrDataUrl, setApprovalQrDataUrl] = useState('');
+    const [approvalStatus, setApprovalStatus] = useState(null);
+    const approvalWatcherRef = useRef(null);
+
+    const resolveApprovalPath = (path = '') => {
+        if (!path) return '';
+        if (/^https?:\/\//i.test(path)) return path;
+        if (path.startsWith('#')) return `${resolveApprovalOrigin()}${path}`;
+        return `${resolveApprovalOrigin()}${path.startsWith('/') ? path : `/${path}`}`;
+    };
+
+    const stopApprovalWatcher = () => {
+        if (approvalWatcherRef.current) {
+            window.clearInterval(approvalWatcherRef.current);
+            approvalWatcherRef.current = null;
+        }
+    };
+
+    const closeApprovalPreview = () => {
+        stopApprovalWatcher();
+        setApprovalPreview((prev) => ({ ...prev, visible: false }));
+        setApprovalCopyFeedback('');
+        setApprovalQrDataUrl('');
+        setApprovalStatus(null);
+        navigate('/worksite', { replace: true });
+    };
+
+    const confirmCloseApprovalPreview = () => {
+        const shouldClose = typeof window === 'undefined' ? true : window.confirm('ยืนยันที่จะปิดหน้าต่างนี้หรือไม่? หากปิดจะกลับไปหน้าหลักและไม่สามารถเปิดหน้านี้ได้อีก');
+        if (shouldClose) closeApprovalPreview();
+    };
+
+    const handleCopyApprovalUrl = async () => {
+        if (!approvalPreview.url) return;
+        if (typeof navigator === 'undefined' || !navigator.clipboard) {
+            setApprovalCopyFeedback('อุปกรณ์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+            window.setTimeout(() => setApprovalCopyFeedback(''), 2500);
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(approvalPreview.url);
+            setApprovalCopyFeedback('คัดลอกลิงก์แล้ว');
+            window.setTimeout(() => setApprovalCopyFeedback(''), 2500);
+        } catch (_) {
+            setApprovalCopyFeedback('คัดลอกไม่สำเร็จ');
+            window.setTimeout(() => setApprovalCopyFeedback(''), 2500);
+        }
+    };
+
+    const handleDownloadApprovalQr = () => {
+        if (!approvalQrDataUrl) return;
+        const slug = approvalPreview.oilLogId ? `approval-${approvalPreview.oilLogId}` : 'approval';
+        const anchor = document.createElement('a');
+        anchor.href = approvalQrDataUrl;
+        anchor.download = `${slug}.png`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    };
+
+    useEffect(() => {
+        let cancelled = false;
+        async function generateQr() {
+            if (!approvalPreview.url) {
+                setApprovalQrDataUrl('');
+                return;
+            }
+            try {
+                const dataUrl = await QRCode.toDataURL(approvalPreview.url, {
+                    width: 360,
+                    margin: 1,
+                    errorCorrectionLevel: 'H',
+                    color: { dark: '#111b47', light: '#ffffff' },
+                });
+                if (!cancelled) setApprovalQrDataUrl(dataUrl);
+            } catch (_) {
+                if (!cancelled) setApprovalQrDataUrl('');
+            }
+        }
+        generateQr();
+        return () => { cancelled = true; };
+    }, [approvalPreview.url]);
+
+    const approvalQrSrc = approvalQrDataUrl || '';
+    const approvalExpiryLabel = useMemo(() => {
+        if (!approvalPreview.expiresAt) return '';
+        const parsed = Date.parse(approvalPreview.expiresAt);
+        if (Number.isNaN(parsed)) return '';
+        const diff = parsed - Date.now();
+        if (diff <= 0) return 'หมดอายุแล้ว';
+        const mins = Math.round(diff / 60000);
+        if (mins < 60) return `${mins} นาที`;
+        const hours = Math.round(mins / 60);
+        return `${hours} ชั่วโมง`;
+    }, [approvalPreview.expiresAt]);
+
+    const operatorDefaults = useMemo(() => resolveOperatorDefaults(user), [user]);
+
     const [form, setForm] = useState(() => ({
         documentDate: formatDateTimeLocal(),
         machineCode: '',
@@ -39,23 +290,23 @@ export default function MachineWorkLog() {
         machineDescription: '',
         workOrder: '',
         workOrders: [''],
-        operatorName: user?.fullName || '',
+        operatorName: operatorDefaults.operatorName || '',
+        operatorAccountId: operatorDefaults.operatorAccountId,
         operationDetails: '',
-        meterHourStart: '',
-        meterHourEnd: '',
-        odometerStart: '',
-        odometerEnd: '',
+        meterHour: '',
+        odometer: '',
         workMeterStart: '',
         workMeterEnd: '',
         workMeterTotal: '',
         ...buildInitialTimeFields(),
-        hours: '',
         checklist: createChecklistState(),
         checklistOtherNote: '',
     }));
     const checklistStatuses = ['ปกติ', 'ผิดปกติ'];
     const [logs, setLogs] = useState([]);
     const [machines, setMachines] = useState([]);
+    const [driverOptions, setDriverOptions] = useState([]);
+    const [loadingPersonnel, setLoadingPersonnel] = useState(true);
     const [showMachineOptions, setShowMachineOptions] = useState(false);
     const [machineHighlightIndex, setMachineHighlightIndex] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -63,6 +314,27 @@ export default function MachineWorkLog() {
     const [error, setError] = useState('');
     const machinePickerRef = useRef(null);
     const navigate = useNavigate();
+    const [personnelError, setPersonnelError] = useState('');
+    const canAutoFillOperator = useMemo(() => userHasAnyRole(user, operatorRoleKeys), [user]);
+
+    useEffect(() => {
+        if (!canAutoFillOperator) {
+            return;
+        }
+        setForm((prev) => {
+            const sameId = (prev.operatorAccountId ?? null) === (operatorDefaults.operatorAccountId ?? null);
+            const sameName = (prev.operatorName || '') === (operatorDefaults.operatorName || '');
+            if (sameId && sameName) {
+                return prev;
+            }
+            return {
+                ...prev,
+                operatorName: operatorDefaults.operatorName || '',
+                operatorAccountId: operatorDefaults.operatorAccountId,
+            };
+        });
+    }, [canAutoFillOperator, operatorDefaults]);
+
 
     useEffect(() => {
         (async () => {
@@ -88,6 +360,42 @@ export default function MachineWorkLog() {
             }
         })();
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+
+        async function fetchDriverDirectory() {
+            if (userHasAnyRole(user, operatorRoleKeys)) {
+                setDriverOptions([]);
+                setLoadingPersonnel(false);
+                return;
+            }
+            setLoadingPersonnel(true);
+            try {
+                const params = new URLSearchParams();
+                operatorRoleKeys.forEach((role) => params.append('role', role));
+                params.append('limit', '500');
+                const data = await apiGet(`/api/users.php?${params.toString()}`, { signal: controller.signal });
+                if (!cancelled) {
+                    setDriverOptions(Array.isArray(data.items) ? data.items : []);
+                }
+            } catch (err) {
+                if (!cancelled && err?.name !== 'AbortError') {
+                    setPersonnelError(err.message || 'ไม่สามารถโหลดรายชื่อพนักงานขับได้');
+                    setDriverOptions([]);
+                }
+            } finally {
+                if (!cancelled) setLoadingPersonnel(false);
+            }
+        }
+
+        fetchDriverDirectory();
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [user?.Center_Id]);
 
     const handleChange = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
 
@@ -239,6 +547,28 @@ export default function MachineWorkLog() {
         }
     };
 
+    const handleDriverSelect = (event) => {
+        const selectedValue = event.target.value;
+        setForm((prev) => {
+            if (!selectedValue) {
+                return { ...prev, operatorName: '', operatorAccountId: null };
+            }
+            const selected = driverOptions.find((option) => {
+                const rawId = option.id ?? option.username ?? '';
+                return String(rawId) === selectedValue;
+            });
+            if (!selected) {
+                return { ...prev, operatorName: '', operatorAccountId: null };
+            }
+            const label = (selected.fullName || selected.username || '').trim();
+            return {
+                ...prev,
+                operatorName: label,
+                operatorAccountId: selected.id ?? null,
+            };
+        });
+    };
+
     const parseTimeToMinutes = (value) => {
         if (!value) return null;
         const parts = String(value).split(':');
@@ -330,23 +660,46 @@ export default function MachineWorkLog() {
         setSaving(true);
         setError('');
         try {
-            // ensure we send workOrders array and keep single workOrder for backward compatibility
             const payload = { ...form };
             if (!Array.isArray(payload.workOrders)) {
                 payload.workOrders = Array.isArray(form.workOrders) ? form.workOrders : (form.workOrders ? [form.workOrders] : []);
             }
             payload.workOrder = payload.workOrders && payload.workOrders.length ? payload.workOrders[0] : (payload.workOrder || '');
-            // try to post to backend; if not available, just prepend locally
             const res = await apiPost('/api/machine_work_logs.php', payload).catch(() => null);
             if (res && res.item) {
                 setLogs((prev) => [res.item, ...prev]);
             } else {
                 setLogs((prev) => [{ id: Date.now(), ...payload }, ...prev]);
             }
+
+            const approvalPayload = res?.approval || null;
+            const approvalUrl = approvalPayload ? resolveApprovalPath(approvalPayload.path || approvalPayload.url || '') : '';
+            const approvalLogId = res?.item?.MachineWorkLog_Id ?? res?.item?.machineWorkLogId ?? res?.item?.id ?? null;
+            if (approvalUrl) {
+                stopApprovalWatcher();
+                setApprovalPreview({
+                    visible: true,
+                    url: approvalUrl,
+                    token: approvalPayload.token || '',
+                    expiresAt: approvalPayload.expires_at || approvalPayload.expiresAt || '',
+                    oilLogId: approvalLogId,
+                });
+            }
+            const statusPayload = res?.approvalStatus || null;
+            if (statusPayload) {
+                setApprovalStatus({
+                    inspectorName: statusPayload.inspectorName || '',
+                    inspectorDone: Boolean(statusPayload.inspectorDone),
+                    error: statusPayload.error || '',
+                });
+            } else {
+                setApprovalStatus(null);
+            }
             setForm((prev) => ({
                 ...prev,
                 operationDetails: '',
-                hours: '',
+                meterHour: '',
+                odometer: '',
                 workOrder: '',
                 workOrders: [''],
                 workMeterStart: '',
@@ -407,6 +760,7 @@ export default function MachineWorkLog() {
                                         aria-controls="machine-picker-options"
                                         aria-autocomplete="list"
                                         autoComplete="off"
+                                        required
                                     />
                                     {showMachineOptions && filteredMachineOptions.length > 0 && (
                                         <ul className="picker-options" id="machine-picker-options" role="listbox">
@@ -489,49 +843,28 @@ export default function MachineWorkLog() {
                             </div>
                         </div>
                         <label>
-                            พนักงาน/ผู้ปฏิบัติงาน
-                            <input type="text" value={form.operatorName} disabled />
-                            <span className="muted small-text">ชื่อผู้ปฏิบัติงานถูกล็อกตามบัญชีที่เข้าสู่ระบบ</span>
-                        </label>
-                        <label>
                             รายละเอียดการทำงาน
-                            <textarea rows={4} value={form.operationDetails} onChange={handleChange('operationDetails')} required />
+                            <textarea rows={4} value={form.operationDetails} onChange={handleChange('operationDetails')} />
                         </label>
 
                         <header>
-                            <h3>มิเตอร์ / เลขไมล์</h3>
+                            <h3>เลขชั่วโมง / เลขไมล์</h3>
                         </header>
                         <div className="grid three-cols">
                             <label>
-                                ชั่วโมงเครื่อง (HR) ก่อน
-                                <input type="number" inputMode="decimal" step="0.1" value={form.meterHourStart} onChange={handleChange('meterHourStart')} />
-                            </label>
-                            <label>
-                                ชั่วโมงเครื่อง (HR) หลัง
-                                <input type="number" inputMode="decimal" step="0.1" value={form.meterHourEnd} onChange={handleChange('meterHourEnd')} />
-                            </label>
-                            <label>
-                                รวมชั่วโมง (HR)
-                                <input type="number" inputMode="decimal" step="0.1" value={form.hours} onChange={handleChange('hours')} />
+                                เลขชั่วโมง (HR)
+                                <input type="number" inputMode="decimal" step="0.1" value={form.meterHour} onChange={handleChange('meterHour')} />
                             </label>
                         </div>
                         <div className="grid three-cols">
                             <label>
-                                เลขไมล์ (KM) ก่อน
-                                <input type="number" inputMode="decimal" step="0.1" value={form.odometerStart} onChange={handleChange('odometerStart')} />
-                            </label>
-                            <label>
-                                เลขไมล์ (KM) หลัง
-                                <input type="number" inputMode="decimal" step="0.1" value={form.odometerEnd} onChange={handleChange('odometerEnd')} />
-                            </label>
-                            <label>
-                                หมายเหตุ
-                                <input type="text" value={form.operationNote} onChange={handleChange('operationNote')} />
+                                เลขไมล์ (KM)
+                                <input type="number" inputMode="decimal" step="0.1" value={form.odometer} onChange={handleChange('odometer')} />
                             </label>
                         </div>
 
                         <header>
-                            <h3>การใช้งานหน่วยงาน (เมตร)</h3>
+                            <h3>การใช้งานหน่วยงาน</h3>
                         </header>
                         <div className="grid three-cols">
                             <label>
@@ -549,7 +882,7 @@ export default function MachineWorkLog() {
                         </div>
 
                         <header>
-                            <h3>เวลาปฏิบัติงานตามช่วง</h3>
+                            <h3>เวลาปฏิบัติงาน</h3>
                         </header>
                         <div className="time-grid">
                             {(Array.isArray(oilTimeSegments) ? oilTimeSegments : []).map((segment) => {
@@ -646,8 +979,75 @@ export default function MachineWorkLog() {
                                             />
                                         )}
                                     </div>
+
                                 );
                             })}
+                        </div>
+                        <header>
+                            <h3>ผู้รับผิดชอบ</h3>
+                            <p>ระบบจะแสดงเฉพาะชื่อพนักงานขับ ส่วนผู้ตรวจสอบจะยืนยันผ่าน QR หลังบันทึก</p>
+                        </header>
+                        {personnelError && <div className="error-row">{personnelError}</div>}
+                        <div className="grid two-cols">
+                            <label>
+                                พนักงานขับรถ
+                                {canAutoFillOperator ? (
+                                    <select
+                                        value={form.operatorAccountId ? String(form.operatorAccountId) : 'locked-operator'}
+                                        disabled
+                                        required
+                                    >
+                                        {form.operatorName ? (
+                                            <option value={form.operatorAccountId ? String(form.operatorAccountId) : 'locked-operator'}>
+                                                {form.operatorName}
+                                            </option>
+                                        ) : (
+                                            <option value="locked-operator">
+                                                {loadingPersonnel ? 'กำลังโหลดชื่อผู้ใช้งาน...' : 'ไม่พบข้อมูลผู้ใช้'}
+                                            </option>
+                                        )}
+                                    </select>
+                                ) : (
+                                    <select
+                                        value={form.operatorAccountId ? String(form.operatorAccountId) : ''}
+                                        onChange={handleDriverSelect}
+                                        disabled={loadingPersonnel}
+                                        required
+                                    >
+                                        <option value="">เลือกพนักงานขับรถ</option>
+                                        {driverOptions.map((option) => (
+                                            <option
+                                                key={option.id ?? option.username}
+                                                value={String(option.id ?? option.username ?? '')}
+                                            >
+                                                {formatPersonnelOptionLabel(option)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                                <span className="muted small-text">
+                                    {canAutoFillOperator
+                                        ? 'ระบบจะล็อกตามบัญชีที่เข้าสู่ระบบ'
+                                        : (loadingPersonnel
+                                            ? 'กำลังโหลดรายชื่อพนักงานขับ...'
+                                            : (driverOptions.length
+                                                ? 'เลือกจากรายชื่อพนักงานขับที่อนุมัติแล้ว'
+                                                : 'ยังไม่มีพนักงานขับในระบบ'))}
+                                </span>
+                            </label>
+                            <div
+                                style={{
+                                    border: '1px dashed #d0d7de',
+                                    borderRadius: '12px',
+                                    padding: '16px',
+                                    background: '#f8fafc',
+                                }}
+                            >
+                                <strong>การยืนยันผ่าน QR</strong>
+                                <p className="muted" style={{ marginTop: '8px' }}>
+                                    ผู้ตรวจสอบจะสแกน QR เพื่อกรอกชื่อและหมายเหตุด้วยตัวเองหลังบันทึกใบงาน
+                                </p>
+                            </div>
                         </div>
                         {error && <div className="error-row">{error}</div>}
                         <button type="submit" className="button primary full-width" disabled={saving}>
@@ -656,6 +1056,80 @@ export default function MachineWorkLog() {
                     </form>
                 </div>
             </section >
+            {approvalPreview.visible && (
+                <div style={approvalModalStyles.backdrop} role="dialog" aria-modal="true" aria-label="ลิงก์ยืนยันใบงานใหม่">
+                    <div style={approvalModalStyles.card}>
+                        <button
+                            type="button"
+                            style={approvalModalStyles.closeButton}
+                            aria-label="ปิดหน้าต่าง"
+                            onClick={confirmCloseApprovalPreview}
+                        >
+                            ×
+                        </button>
+                        <h3>แชร์ QR ให้ผู้ตรวจสอบ</h3>
+                        <p className="muted">สแกนหรือเปิดลิงก์เพื่อยืนยันการส่งข้อมูลไปยังศูนย์ใหญ่</p>
+                        {approvalExpiryLabel && (
+                            <p className="muted small-text">ลิงก์หมดอายุโดยประมาณ: {approvalExpiryLabel}</p>
+                        )}
+                        {approvalQrSrc ? (
+                            <img
+                                src={approvalQrSrc}
+                                alt="QR code สำหรับยืนยันใบงานน้ำมัน"
+                                style={approvalModalStyles.qrImage}
+                            />
+                        ) : (
+                            <p className="muted" style={{ margin: '24px 0' }}>กำลังสร้าง QR code…</p>
+                        )}
+                        {approvalStatus && (
+                            <div style={{ marginTop: '8px', marginBottom: '12px', textAlign: 'left' }}>
+                                <p><strong>ผู้ตรวจสอบ:</strong> {approvalStatus.inspectorName || 'รอยืนยัน'} {approvalStatus.inspectorDone ? '✅' : '⏳'}</p>
+                                {approvalStatus.inspectorDone && (
+                                    <p style={{ color: '#0f5132', marginTop: '6px' }}>บันทึกข้อมูลเรียบร้อย ส่งข้อมูลไปยังศูนย์ใหญ่แล้ว</p>
+                                )}
+                                {approvalStatus.error && (
+                                    <p className="muted small-text">{approvalStatus.error}</p>
+                                )}
+                            </div>
+                        )}
+                        <div style={approvalModalStyles.linkRow}>
+                            <input
+                                type="text"
+                                value={approvalPreview.url}
+                                style={approvalModalStyles.linkInput}
+                                readOnly
+                                onFocus={(event) => event.target.select()}
+                            />
+                            <button
+                                type="button"
+                                style={approvalModalStyles.copyButton}
+                                onClick={handleCopyApprovalUrl}
+                            >
+                                คัดลอก
+                            </button>
+                        </div>
+                        {approvalCopyFeedback && (
+                            <div style={approvalModalStyles.feedbackText}>{approvalCopyFeedback}</div>
+                        )}
+                        <button
+                            type="button"
+                            style={approvalModalStyles.secondaryButton}
+                            onClick={handleDownloadApprovalQr}
+                            disabled={!approvalQrSrc}
+                        >
+                            บันทึกรูป QR Code
+                        </button>
+                        <p>หากกดปิดหน้าต่างแล้วจะไม่สามารถเข้าหน้าต่างนี้ได้อีก</p>
+                        <button
+                            type="button"
+                            style={approvalModalStyles.primaryButton}
+                            onClick={confirmCloseApprovalPreview}
+                        >
+                            ปิดหน้าต่าง
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

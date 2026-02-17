@@ -44,6 +44,15 @@ const formatThaiDateTime = (value) => {
     }
 };
 
+const describePersonTimestamp = (value, prefix) => {
+    if (!value) return '';
+    const formatted = formatThaiDateTime(value);
+    if (!formatted || formatted === '-') {
+        return '';
+    }
+    return `${prefix} ${formatted}`;
+};
+
 const compactMachineLabel = (row) => {
     if (!row) return '-';
     const code = row.Machine_Code || (row.Machine_Id ? `ID ${row.Machine_Id}` : '-');
@@ -119,6 +128,58 @@ export default function OilLogsAdmin() {
     const [latestError, setLatestError] = useState('');
     const unauthorizedTimerRef = useRef(null);
 
+    const timeDetails = useMemo(() => {
+        if (!selected) return [];
+        return oilTimeSegments.map((segment) => {
+            const prefix = `Time_${segment.key}`;
+            return {
+                key: segment.key,
+                label: segment.label,
+                hint: segment.hint,
+                start: selected[`${prefix}_Start`] || '',
+                end: selected[`${prefix}_End`] || '',
+                total: selected[`${prefix}_Total`],
+            };
+        });
+    }, [selected]);
+
+    const totalTimeHours = timeDetails.reduce((sum, row) => {
+        const value = parseFloat(row.total);
+        if (Number.isNaN(value)) {
+            return sum;
+        }
+        return sum + value;
+    }, 0);
+
+    const hasOilTimeSegments = timeDetails.some((row) => (
+        Boolean(row.start || row.end || (row.total !== null && row.total !== undefined && row.total !== ''))
+    ));
+
+    const mwlTimeDetails = useMemo(() => {
+        if (!selected || !selected.MWL_Id) return [];
+        return oilTimeSegments.map((segment) => {
+            const prefix = `MWL_Time_${segment.key}`;
+            return {
+                key: segment.key,
+                label: segment.label,
+                hint: segment.hint,
+                start: selected[`${prefix}_Start`] || '',
+                end: selected[`${prefix}_End`] || '',
+                total: selected[`${prefix}_Total`],
+            };
+        });
+    }, [selected]);
+
+    const mwlTotalTimeHours = mwlTimeDetails.reduce((sum, row) => {
+        const value = parseFloat(row.total);
+        if (Number.isNaN(value)) return sum;
+        return sum + value;
+    }, 0);
+
+    const hasMwlTimeSegments = mwlTimeDetails.some((row) => (
+        Boolean(row.start || row.end || (row.total !== null && row.total !== undefined && row.total !== ''))
+    ));
+
     const handleUnauthorized = (message = 'เซสชั่นหมดอายุ กรุณาเข้าสู่ระบบใหม่') => {
         setError(message);
         if (unauthorizedTimerRef.current === null) {
@@ -138,7 +199,6 @@ export default function OilLogsAdmin() {
         if (params.fuelType && params.fuelType !== 'ทั้งหมด') searchParams.set('fuelType', params.fuelType);
         return searchParams.toString();
     };
-
     const fetchData = async (params) => {
         setLoading(true);
         setError('');
@@ -252,42 +312,13 @@ export default function OilLogsAdmin() {
         return [
             { label: 'วันที่', value: formatDateDMY(selected.Document_Date) },
             { label: 'รหัสเครื่อง', value: selected.Machine_Code || '-' },
-            { label: 'รายละเอียดเครื่อง', value: selected.Machine_Description || selected.Machine_Name || '-' },
-            { label: 'WBS / รหัสงาน', value: selected.Work_Order || '-' },
-            { label: 'โครงการ', value: selected.Project_Name || '-' },
-            { label: 'สถานที่', value: selected.Location_Name || '-' },
-            { label: 'ชั่วโมงเครื่อง', value: `${numberFormat(selected.Meter_Hour_Start)} → ${numberFormat(selected.Meter_Hour_End)}` },
-            { label: 'เลขกิโลเมตร', value: `${numberFormat(selected.Odometer_Start)} → ${numberFormat(selected.Odometer_End)}` },
-            { label: 'คงเหลือ', value: `${numberFormat(selected.Tank_Before_Liters)} → ${numberFormat(selected.Tank_After_Liters)} ลิตร` },
-            // { label: 'ใบจ่ายน้ำมัน', value: selected.Fuel_Ticket_No || '-' },
-            // { label: 'ผู้รับผิดชอบ', value: `${selected.Operator_Name || '-'}` },
+            { label: 'รายละเอียดเครื่องยนต์', value: selected.Machine_Description || selected.Machine_Name || '-' },
+            { label: 'โครงการ/หน่วยงาน', value: selected.Project_Name || '-' },
+            { label: 'ปั้มน้ำมันในบริษัท/นอกบริษัท', value: selected.Location_Name || '-' },
+            { label: 'ก่อนเติม → หลังเติม', value: `${numberFormat(selected.Tank_Before_Liters)} → ${numberFormat(selected.Tank_After_Liters)} ลิตร` },
             { label: 'บันทึกโดย', value: selected.Recorder_Name || selected.Created_By || '-' },
         ];
     }, [selected]);
-
-    const timeDetails = useMemo(() => {
-        if (!selected) return [];
-        return oilTimeSegments.map((segment) => {
-            const prefix = `Time_${segment.key}`;
-            return {
-                key: segment.key,
-                label: segment.label,
-                hint: segment.hint,
-                start: selected[`${prefix}_Start`] || '',
-                end: selected[`${prefix}_End`] || '',
-                total: selected[`${prefix}_Total`],
-            };
-        });
-    }, [selected]);
-
-    const totalTimeHours = timeDetails.reduce((sum, row) => {
-        const value = parseFloat(row.total);
-        if (Number.isNaN(value)) {
-            return sum;
-        }
-        return sum + value;
-    }, 0);
-
     const checklistDetails = useMemo(() => {
         const raw = (selected && selected.Checklist) || {};
         const otherNote = raw[checklistOtherNoteKey] || '';
@@ -372,12 +403,30 @@ export default function OilLogsAdmin() {
         if (!selected) {
             return [];
         }
-        const inspectorName = selected.Approval_Inspector_Name || selected.Assistant_Name || '';
+        const inspectorName = selected.MWL_Inspector_Name || selected.Approval_Inspector_Name || selected.Assistant_Name || '';
         const oilerName = selected.Approval_Oiler_Name || selected.Recorder_Name || selected.Requester_Name || '';
+        const createdTime = describePersonTimestamp(selected.Created_At, 'บันทึกเมื่อ');
+        const inspectorApprovedTime = describePersonTimestamp(
+            selected.Approval_Inspector_Approved_At || selected.MWL_Inspector_Approved_At,
+            'ยืนยันเมื่อ'
+        );
+        const oilerApprovedTime = describePersonTimestamp(selected.Approval_Oiler_Approved_At, 'ยืนยันเมื่อ');
         return [
-            { label: 'พนักงานขับรถ', value: selected.Operator_Name || 'ไม่ระบุ' },
-            { label: 'ผู้ตรวจสอบ', value: inspectorName || 'ไม่ระบุ' },
-            { label: 'พนักงานออยเลอร์', value: oilerName || 'ไม่ระบุ' },
+            {
+                label: 'พนักงานขับรถ',
+                value: selected.Operator_Name || 'ไม่ระบุ',
+                timeText: createdTime,
+            },
+            {
+                label: 'ผู้ตรวจสอบ',
+                value: inspectorName || 'ไม่ระบุ',
+                timeText: inspectorApprovedTime,
+            },
+            {
+                label: 'พนักงานออยเลอร์',
+                value: oilerName || 'ไม่ระบุ',
+                timeText: oilerApprovedTime,
+            },
         ];
     }, [selected]);
 
@@ -545,10 +594,35 @@ export default function OilLogsAdmin() {
                                 </section>
                                 <section className="detail-card-block">
                                     <h3>รายละเอียดการทำงาน</h3>
-                                    <p>{selected.Operation_Details || '—'}</p>
+                                    {selected.MWL_Id && (
+                                        <div className="mwlog-summary">
+                                            <div className="muted">เลขที่: {selected.MWL_Document_No || selected.MWL_Id}</div>
+                                            <div className="mw-meters">
+                                                <div>เลขชั่วโมง : {selected.MWL_Meter_Hour ? numberFormat(selected.MWL_Meter_Hour) : '—'}</div>
+                                                <div>เลขไมล์ : {selected.MWL_Odometer ? numberFormat(selected.MWL_Odometer) : '—'}</div>
+                                                {/* <div>มิเตอร์ก่อนเริ่มงาน/หลังเลิกงาน: {selected.MWL_Work_Meter_Start ? `${numberFormat(selected.MWL_Work_Meter_Start)} → ${numberFormat(selected.MWL_Work_Meter_End)} (${numberFormat(selected.MWL_Work_Meter_Total)})` : '—'}</div> */}
+                                            </div>
+                                            {selected.MWL_Operation_Details && (
+                                                <div className="mw-operation">
+                                                    <strong>รายละเอียดงาน</strong>
+                                                    <p>{selected.MWL_Operation_Details}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <div className="detail-wbs">
                                         <strong>WBS / รหัสงาน</strong>
-                                        <span>{selected.Work_Order || '—'}</span>
+                                        <span>
+                                            {(Array.isArray(selected.MWL_Work_Orders) && selected.MWL_Work_Orders.length > 0) ? (
+                                                <div className="wbs-list">
+                                                    {selected.MWL_Work_Orders.map((entry, idx) => (
+                                                        <div key={idx}>{entry}</div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                selected.Work_Order || '—'
+                                            )}
+                                        </span>
                                     </div>
                                     <h4>หมายเหตุ</h4>
                                     <p>{selected.Notes || '—'}</p>
@@ -560,52 +634,66 @@ export default function OilLogsAdmin() {
                                             {operatorEntries.map((entry) => (
                                                 <li key={entry.label}>
                                                     <span>{entry.label}</span>
-                                                    <strong>{entry.value}</strong>
+                                                    <div className="detail-person-value">
+                                                        <strong>{entry.value}</strong>
+                                                        {entry.timeText && (
+                                                            <small className="muted small-text">{entry.timeText}</small>
+                                                        )}
+                                                    </div>
                                                 </li>
                                             ))}
                                         </ul>
                                     </section>
                                 )}
                                 <section className="detail-card-block detail-card-block--meter">
-                                    <h3>มิเตอร์หัวจ่าย</h3>
-                                    <div className="detail-meter-row">
-                                        <span>เริ่ม</span>
-                                        <strong>{numberFormat(selected.Work_Meter_Start)}</strong>
-                                    </div>
-                                    <div className="detail-meter-row">
-                                        <span>จบ</span>
-                                        <strong>{numberFormat(selected.Work_Meter_End)}</strong>
-                                    </div>
-                                    <div className="detail-meter-row detail-meter-row--total">
-                                        <span>รวม</span>
-                                        <strong>{numberFormat(selected.Work_Meter_Total)} หน่วย</strong>
-                                    </div>
+                                    <h3>มิเตอร์ก่อนเริ่มงาน/หลังเลิกงาน</h3>
+                                    {selected.MWL_Id && (
+                                        <div className="detail-meter-group">
+                                            <div className="detail-meter-row">
+                                                <span>ก่อนเริ่ม</span>
+                                                <strong>{numberFormat(selected.MWL_Work_Meter_Start)}</strong>
+                                            </div>
+                                            <div className="detail-meter-row">
+                                                <span>เลิกงาน</span>
+                                                <strong>{numberFormat(selected.MWL_Work_Meter_End)}</strong>
+                                            </div>
+                                            <div className="detail-meter-row detail-meter-row--total">
+                                                <span>รวม</span>
+                                                <strong>{numberFormat(selected.MWL_Work_Meter_Total)}</strong>
+                                            </div>
+                                        </div>
+                                    )}
                                 </section>
                                 <section className="detail-card-block detail-card-block--time">
                                     <h3>เวลาปฏิบัติงาน</h3>
-                                    <div className="time-grid time-grid--static">
-                                        <div className="time-row time-row--header">
-                                            <span>ช่วง</span>
-                                            <span>เริ่ม</span>
-                                            <span>เลิก</span>
-                                            <span>รวม</span>
-                                        </div>
-                                        {timeDetails.map((row) => (
-                                            <div className="time-row" key={row.key}>
-                                                <div>
-                                                    <strong>{row.label}</strong>
-                                                    <p className="muted">{row.hint}</p>
+                                    {selected.MWL_Id && hasMwlTimeSegments && (
+                                        <div className="time-group">
+                                            <div className="time-grid time-grid--static">
+                                                <div className="time-row time-row--header">
+                                                    <span>ช่วง</span>
+                                                    <span>เริ่ม</span>
+                                                    <span>เลิก</span>
                                                 </div>
-                                                <span>{formatTimeValue(row.start)}</span>
-                                                <span>{formatTimeValue(row.end)}</span>
-                                                <span>{formatHourValue(row.total)} ชม.</span>
+                                                {mwlTimeDetails.map((row) => (
+                                                    <div className="time-row" key={`mwl-${row.key}`}>
+                                                        <div>
+                                                            <strong>{row.label}</strong>
+                                                            <p className="muted">{row.hint}</p>
+                                                        </div>
+                                                        <span>{formatTimeValue(row.start)}</span>
+                                                        <span>{formatTimeValue(row.end)}</span>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                    <div className="time-total-pill time-total-pill--static">
-                                        <span>รวมทั้งหมด</span>
-                                        <strong>{formatHourValue(totalTimeHours)} ชม.</strong>
-                                    </div>
+                                            <div className="time-total-pill time-total-pill--static">
+                                                <span>รวมเวลาทั้งหมด</span>
+                                                <strong>{formatHourValue(mwlTotalTimeHours)} ชม.</strong>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!hasOilTimeSegments && (!selected.MWL_Id || !hasMwlTimeSegments) && (
+                                        <p className="muted">ไม่มีข้อมูลเวลาปฏิบัติงาน</p>
+                                    )}
                                 </section>
                                 <section className="detail-card-block">
                                     <h3>รายการตรวจเช็ค</h3>

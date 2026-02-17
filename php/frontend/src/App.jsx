@@ -9,6 +9,7 @@ import Scanner from './pages/Scanner.jsx';
 import OilLog from './pages/OilLog.jsx';
 import OilApproval from './pages/OilApproval.jsx';
 import MachineWorkLog from './pages/MachineWorkLog.jsx';
+import MachineWorkApproval from './pages/MachineWorkApproval.jsx';
 // import MachineWorkLogAdmin from './pages/admin/MachineWorkLogAdmin.jsx';
 import Reports from './pages/Reports.jsx';
 import Checklist from './pages/Checklist.jsx';
@@ -46,7 +47,7 @@ function ProtectedRoute({ children }) {
 function AppShell() {
     const location = useLocation();
     const isHome = location.pathname === '/';
-    const fullWidthPaths = ['/worksite', '/categories', '/scanner', '/reports', '/login', '/checklist', '/oil-approval'];
+    const fullWidthPaths = ['/worksite', '/categories', '/scanner', '/reports', '/login', '/checklist', '/oil-approval', '/machine-work-approval'];
     const edgePaths = ['/login'];
     const isFullWidth = fullWidthPaths.includes(location.pathname);
     const isEdge = edgePaths.includes(location.pathname);
@@ -215,6 +216,14 @@ function AppShell() {
                         element={
                             <ProtectedRoute>
                                 <OilApproval />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/machine-work-approval"
+                        element={
+                            <ProtectedRoute>
+                                <MachineWorkApproval />
                             </ProtectedRoute>
                         }
                     />

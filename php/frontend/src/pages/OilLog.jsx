@@ -478,9 +478,7 @@ export default function OilLog() {
                 }
                 setApprovalStatus({
                     oilerDone: Boolean(data?.approval?.oiler?.approved_at),
-                    inspectorDone: Boolean(data?.approval?.inspector?.approved_at),
                     oilerName: data?.approval?.oiler?.full_name || '',
-                    inspectorName: data?.approval?.inspector?.full_name || '',
                     fetchedAt: Date.now(),
                 });
             } catch (err) {
@@ -499,9 +497,9 @@ export default function OilLog() {
     }, [approvalPreview.visible, approvalPreview.token, approvalPreview.oilLogId]);
 
     useEffect(() => {
-        if (approvalStatus?.oilerDone && approvalStatus?.inspectorDone) {
+        if (approvalStatus?.oilerDone) {
             stopApprovalWatcher();
-            setSuccessMessage('บันทึกข้อมูลเรียบร้อย (ผู้ตรวจสอบและพนักงานออยเลอร์ยืนยันแล้ว)');
+            setSuccessMessage('บันทึกข้อมูลเรียบร้อย (พนักงานออยเลอร์ยืนยันแล้ว)');
         }
     }, [approvalStatus]);
 
@@ -1041,7 +1039,6 @@ export default function OilLog() {
         });
         try {
             const result = await apiPost('/api/oillogs.php', multipartPayload);
-            setSuccessMessage('บันทึกข้อมูลเรียบร้อย');
             setForm(createDefaultForm(resolveOperatorDefaults(user)));
             setPhotoFiles([]);
             setPhotoError('');
@@ -1050,6 +1047,11 @@ export default function OilLog() {
             }
             await refreshLogs();
             const approvalPayload = result?.approval || null;
+            const approvalNotice = typeof result?.approval_notice === 'string' ? result.approval_notice : '';
+            const successText = approvalPayload || !approvalNotice
+                ? 'บันทึกข้อมูลเรียบร้อย'
+                : `บันทึกข้อมูลเรียบร้อย (${approvalNotice})`;
+            setSuccessMessage(successText);
             const createdOilLogId = result?.item?.OilLog_Id ?? result?.item?.oilLog_id ?? null;
             if (approvalPayload) {
                 const absoluteUrl = buildApprovalUrl(approvalPayload.path || approvalPayload.url || '');
@@ -1126,34 +1128,29 @@ export default function OilLog() {
                         <div className="grid three-cols">
                             <label>
                                 โครงการ/หน่วยงาน
-                                {projectOptions.length ? (
-                                    <>
-                                        <select
-                                            value={projectIsOther ? '__other__' : (form.projectName || '')}
-                                            onChange={(e) => {
-                                                const v = e.target.value;
-                                                if (v === '__other__') {
-                                                    setProjectIsOther(true);
-                                                    setForm((p) => ({ ...p, projectName: '' }));
-                                                } else {
-                                                    setProjectIsOther(false);
-                                                    setForm((p) => ({ ...p, projectName: v }));
-                                                }
-                                            }}
-                                            required
-                                        >
-                                            <option value="">เลือกโครงการ/หน่วยงาน</option>
-                                            {projectOptions.map((name) => (
-                                                <option key={name} value={name}>{name}</option>
-                                            ))}
-                                        </select>
-                                        {projectIsOther && (
-                                            <input type="text" value={form.projectName} onChange={handleChange('projectName')} placeholder="พิมพ์ชื่อโครงการ/หน่วยงาน" required />
-                                        )}
-                                    </>
-                                ) : (
-                                    <input type="text" value={form.projectName} onChange={handleChange('projectName')} placeholder="เช่น โครงการทางด่วน" required/>
-                                )}
+                                <select
+                                    value={projectIsOther ? '__other__' : (form.projectName || '')}
+                                    onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (v === '__other__') {
+                                            setProjectIsOther(true);
+                                            setForm((p) => ({ ...p, projectName: '' }));
+                                        } else {
+                                            setProjectIsOther(false);
+                                            setForm((p) => ({ ...p, projectName: v }));
+                                        }
+                                    }}
+                                    required={!projectIsOther}
+                                >
+                                    <option value="">เลือกโครงการ/หน่วยงาน</option>
+                                    {projectOptions.map((name) => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                                    {/* <option value="__other__">อื่นๆ (ระบุเอง)</option> */}
+                                </select>
+                                {/* {projectIsOther && (
+                                    <input type="text" value={form.projectName} onChange={handleChange('projectName')} placeholder="พิมพ์ชื่อโครงการ/หน่วยงาน" required />
+                                )} */}
                             </label>
                             <label>
                                 ปั้มน้ำมันในบริษัท/ภายนอก
@@ -1221,17 +1218,6 @@ export default function OilLog() {
                                     </div>
                                 </label>
                             </div>
-                            {/* ไปหน้าเครื่องจักร */}
-                            {/* <div className="grid two-cols operation-grid">
-                                <label>
-                                    รายละเอียดการทำงาน
-                                    <textarea rows="4" value={form.operationDetails} onChange={handleChange('operationDetails')} placeholder="เช่น ส่งของ" />
-                                </label>
-                                <label>
-                                    WBS / รหัสงาน
-                                    <input type="text" value={form.workOrder} onChange={handleChange('workOrder')} placeholder="เช่น โครงการสร้างสะพาน" />
-                                </label>
-                            </div> */}
 
                         <header>
                             <h3>ประเภทและปริมาณน้ำมัน</h3>
@@ -1309,91 +1295,10 @@ export default function OilLog() {
                                 <input type="text" value={form.notes} onChange={handleChange('notes')} placeholder="เช่น เติมสำรอง" />
                             </label>
                         </div>
-                            {/* เอาออกไปอยู่กับประจำวัน */}
-                        {/* <header>
-                            <h3>มิเตอร์หัวจ่ายน้ำมัน</h3>
-                            <p>คัดลอกตัวเลขจากมิเตอร์หัวจ่ายก่อน/หลังการทำงาน เพื่อคำนวณจำนวนที่ใช้จริง</p>
-                        </header>
-                        <div className="grid three-cols">
-                            <label>
-                                มิเตอร์ก่อนเริ่มงาน
-                                <input type="number" inputMode="decimal" step="0.01" value={form.workMeterStart} onChange={handleMeterChange('workMeterStart')} required/>
-                            </label>
-                            <label>
-                                มิเตอร์หลังเสร็จงาน
-                                <input type="number" inputMode="decimal" step="0.01" value={form.workMeterEnd} onChange={handleMeterChange('workMeterEnd')} required/>
-                            </label>
-                            <label>
-                                รวม (หน่วยมิเตอร์)
-                                <input type="number" inputMode="decimal" step="0.01" value={form.workMeterTotal} onChange={handleChange('workMeterTotal')} />
-                            </label>
-                        </div> */}
-                        {/* เอาไปใว้ในเช็คประจำวัน */}
-                        {/* <header>
-                            <h3>เวลาปฏิบัติงานตามช่วง</h3>
-                            <p>แยกเวลาปฏิบัติงานเป็นเช้า บ่าย และ OT ตามแบบฟอร์ม</p>
-                        </header>
-                        <div className="time-grid">
-                            {oilTimeSegments.map((segment) => {
-                                const startField = `time${segment.key}Start`;
-                                const endField = `time${segment.key}End`;
-                                const totalField = `time${segment.key}Total`;
-                                return (
-                                    <div className="time-row" key={segment.key}>
-                                        <div className="time-row__meta">
-                                            <strong>{segment.label}</strong>
-                                            <p className="muted">{segment.hint}</p>
-                                        </div>
-                                        <label className="time-field">
-                                            <span>เริ่มงาน</span>
-                                            <input
-                                                type="time"
-                                                value={form[startField]}
-                                                onChange={handleTimeFieldChange(segment.key, 'start')}
-                                            />
-                                        </label>
-                                        <label className="time-field">
-                                            <span>เลิกงาน</span>
-                                            <input
-                                                type="time"
-                                                value={form[endField]}
-                                                onChange={handleTimeFieldChange(segment.key, 'end')}
-                                            />
-                                        </label>
-                                        <label className="time-field">
-                                            <span>รวม (ชม.)</span>
-                                            <input
-                                                type="time"
-                                                value={form[totalField]}
-                                                onChange={handleTimeFieldChange(segment.key, 'total')}
-                                            />
-                                        </label>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <div className="time-total-pill" aria-live="polite">
-                            <span>รวมเวลาทั้งหมด</span>
-                            <strong>{formattedTotalWorkHours} ชม.</strong>
-                        </div> */}
-                        {/* ไปหน้าเครืองจักร */}
-                        {/* <header>
-                            <h3>ชั่วโมงเครื่อง / เลขไมล์</h3>
-                        </header>
-                        <div className="grid two-cols">
-                            <label>
-                                ชั่วโมงเครื่อง (HR)
-                                <input type="number" inputMode="decimal" step="0.1" value={form.meterHourStart} onChange={handleChange('meterHourStart')} />
-                            </label>
-                            <label>
-                                เลขกิโลเมตร (KM)
-                                <input type="number" inputMode="decimal" step="0.1" value={form.odometerStart} onChange={handleChange('odometerStart')} />
-                            </label>
-                        </div> */}
 
                         <header>
                             <h3>ผู้รับผิดชอบ</h3>
-                            <p>ระบบจะแสดงเฉพาะชื่อพนักงานขับ ส่วนผู้ตรวจสอบและพนักงานออยเลอร์จะยืนยันผ่าน QR หลังบันทึก</p>
+                            <p>ระบบจะแสดงเฉพาะชื่อพนักงานขับ ส่วนพนักงานออยเลอร์จะยืนยันผ่าน QR หลังบันทึก</p>
                         </header>
                         {personnelError && <div className="error-row">{personnelError}</div>}
                         <div className="grid two-cols">
@@ -1453,71 +1358,10 @@ export default function OilLog() {
                             >
                                 <strong>การยืนยันผ่าน QR</strong>
                                 <p className="muted" style={{ marginTop: '8px' }}>
-                                    ผู้ตรวจสอบและพนักงานออยเลอร์จะสแกน QR เพื่อกรอกชื่อและหมายเหตุด้วยตัวเองหลังบันทึกใบงาน
+                                    พนักงานออยเลอร์จะสแกน QR เพื่อกรอกชื่อและหมายเหตุด้วยตัวเองหลังบันทึกใบงาน
                                 </p>
                             </div>
                         </div>
-                        
-                        {/* ไปหน้าเครื่องจักร */}
-                        {/* <header>
-                            <h3>รายการตรวจเช็คเครื่องจักร</h3>    
-                        </header>
-                        <div className="checklist-grid">
-                            {oilChecklistItems.map((item) => {
-                                const isSingle = Boolean(item.singleOption);
-                                const singleSelected = isSingle ? form.checklist[item.id] === 'เลือก' : false;
-                                const shouldShowNote = item.allowNote && (isSingle ? singleSelected : Boolean(form.checklist[item.id]));
-                                const noteValue = item.id === oilChecklistOtherId ? form.checklistOtherNote : '';
-                                return (
-                                    <div className="checklist-card" key={item.id}>
-                                        <h4>{item.label}</h4>
-                                        {isSingle ? (
-                                            <div className="check-status check-status--single">
-                                                <label className={`status-chip status-chip--single${singleSelected ? ' status-chip--single-active' : ''}`}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={singleSelected}
-                                                        onChange={handleChecklistSingleToggle(item.id)}
-                                                    />
-                                                    <span className="single-check-icon" aria-hidden="true" />
-                                                </label>
-                                            </div>
-                                        ) : (
-                                            <div className="check-status">
-                                                {checklistStatuses.map((status) => {
-                                                    const isActive = form.checklist[item.id] === status;
-                                                    const tone = status === 'ปกติ' ? 'ok' : 'bad';
-                                                    return (
-                                                        <label key={status} className={`status-chip${isActive ? ` status-chip--${tone}` : ''}`}>
-                                                            <input
-                                                                type="radio"
-                                                                name={`check-${item.id}`}
-                                                                value={status}
-                                                                checked={isActive}
-                                                                onChange={() => handleChecklistChange(item.id, status)}
-                                                            />
-                                                            <span>{status}</span>
-                                                        </label>
-                                                    );
-                                                })}
-                                                <button type="button" className="status-chip status-chip--ghost" onClick={() => handleChecklistChange(item.id, '')}>
-                                                    ล้าง
-                                                </button>
-                                            </div>
-                                        )}
-                                        {shouldShowNote && (
-                                            <input
-                                                type="text"
-                                                className="checklist-note-input"
-                                                value={noteValue}
-                                                onChange={handleChecklistOtherNoteChange}
-                                                placeholder={item.notePlaceholder || 'ระบุรายละเอียดเพิ่มเติม'}
-                                            />
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div> */}
 
                         <header>
                             <h3>รูปภาพประกอบ</h3>
@@ -1587,7 +1431,7 @@ export default function OilLog() {
                         >
                             ×
                         </button>
-                        <h3>แชร์ QR ให้ผู้ตรวจสอบ / พนักงานออยเลอร์</h3>
+                        <h3>แชร์ QR ให้พนักงานออยเลอร์</h3>
                         <p className="muted">สแกนหรือเปิดลิงก์เพื่อยืนยันการส่งข้อมูลไปยังศูนย์ใหญ่</p>
                         {approvalExpiryLabel && (
                             <p className="muted small-text">ลิงก์หมดอายุโดยประมาณ: {approvalExpiryLabel}</p>
@@ -1603,9 +1447,8 @@ export default function OilLog() {
                         )}
                         {approvalStatus && (
                             <div style={{ marginTop: '8px', marginBottom: '12px', textAlign: 'left' }}>
-                                <p><strong>ผู้ตรวจสอบ:</strong> {approvalStatus.inspectorName || 'รอยืนยัน'} {approvalStatus.inspectorDone ? '✅' : '⏳'}</p>
                                 <p><strong>พนักงานออยเลอร์:</strong> {approvalStatus.oilerName || 'รอยืนยัน'} {approvalStatus.oilerDone ? '✅' : '⏳'}</p>
-                                {approvalStatus.oilerDone && approvalStatus.inspectorDone && (
+                                {approvalStatus.oilerDone && (
                                     <p style={{ color: '#0f5132', marginTop: '6px' }}>บันทึกข้อมูลเรียบร้อย ส่งข้อมูลไปยังศูนย์ใหญ่แล้ว</p>
                                 )}
                                 {approvalStatus.error && (

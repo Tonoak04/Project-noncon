@@ -87,8 +87,8 @@ export default function AccountBar() {
                                 minWidth: 200,
                             }}
                         >
-                            <div style={{ fontWeight: 800, fontSize: 15 }}>{user.fullName || user.username || 'ผู้ใช้งาน'}</div>
-                            <div style={{ fontWeight:'bold' }}>{user.role || 'ไม่มีบทบาท'}</div>
+                            <div style={{ fontWeight: 800, fontSize: 15 }} >ชื่อผู้ใช้ : {user.fullName || user.username || 'ผู้ใช้งาน'}</div>
+                            <div style={{ fontWeight:'bold' }}>บทบาทผู้ใช้ : {user.role || 'ไม่มีบทบาท'}</div>
                         </div>
                     )}
                     {user && hasRole('admin') && (

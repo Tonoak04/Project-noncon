@@ -1,0 +1,36 @@
+-- Migration: create MachineWorkLog table
+-- Run this against your MySQL database (preferably in a migration workflow)
+
+CREATE TABLE IF NOT EXISTS `MachineWorkLog` (
+  `MachineWorkLog_Id` INT NOT NULL AUTO_INCREMENT,
+  `Center_Id` INT DEFAULT NULL,
+  `Document_No` VARCHAR(50) DEFAULT NULL,
+  `Document_Date` DATETIME NOT NULL,
+  `Work_Order` VARCHAR(100) DEFAULT NULL,
+  `Work_Orders_JSON` TEXT DEFAULT NULL,
+  `Machine_Code` VARCHAR(50) DEFAULT NULL,
+  `Machine_Name` VARCHAR(120) DEFAULT NULL,
+  `Machine_Description` VARCHAR(255) DEFAULT NULL,
+  `Operation_Details` TEXT DEFAULT NULL,
+  `Meter_Hour` DECIMAL(10,2) DEFAULT NULL,
+  `Odometer` DECIMAL(10,2) DEFAULT NULL,
+  `Work_Meter_Start` DECIMAL(10,2) DEFAULT NULL,
+  `Work_Meter_End` DECIMAL(10,2) DEFAULT NULL,
+  `Work_Meter_Total` DECIMAL(10,2) DEFAULT NULL,
+  `Time_Morning_Start` TIME DEFAULT NULL,
+  `Time_Morning_End` TIME DEFAULT NULL,
+  `Time_Morning_Total` DECIMAL(6,2) DEFAULT NULL,
+  `Time_Afternoon_Start` TIME DEFAULT NULL,
+  `Time_Afternoon_End` TIME DEFAULT NULL,
+  `Time_Afternoon_Total` DECIMAL(6,2) DEFAULT NULL,
+  `Time_Ot_Start` TIME DEFAULT NULL,
+  `Time_Ot_End` TIME DEFAULT NULL,
+  `Time_Ot_Total` DECIMAL(6,2) DEFAULT NULL,
+  `Checklist_JSON` TEXT DEFAULT NULL,
+  `Created_By` VARCHAR(120) DEFAULT NULL,
+  `Created_At` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `Updated_At` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`MachineWorkLog_Id`),
+  KEY `idx_document_date` (`Document_Date`),
+  KEY `idx_machine_code` (`Machine_Code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

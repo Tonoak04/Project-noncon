@@ -167,26 +167,55 @@ function generate_oillog_approval_token(PDO $pdo): string
     throw new RuntimeException('ไม่สามารถสร้างโทเคนอนุมัติได้');
 }
 
-function ensure_oillog_approval_record(PDO $pdo, int $oilLogId): array
+function resolve_machine_work_log_id_for_oillog(PDO $pdo, int $oilLogId): ?int
+{
+    $stmt = $pdo->prepare('SELECT Machine_Code, Document_Date FROM OilLog WHERE OilLog_Id = :id LIMIT 1');
+    $stmt->execute([':id' => $oilLogId]);
+    $logRow = $stmt->fetch();
+    if (!$logRow) {
+        return null;
+    }
+    $machineCode = trim((string)($logRow['Machine_Code'] ?? ''));
+    $documentDate = $logRow['Document_Date'] ?? null;
+    if ($machineCode === '' || $documentDate === null) {
+        return null;
+    }
+    $stmt = $pdo->prepare(
+        'SELECT mwl.MachineWorkLog_Id
+        FROM MachineWorkLog mwl
+        WHERE mwl.Machine_Code = :machineCode
+            AND mwl.Document_Date <= :documentDate
+        ORDER BY mwl.Document_Date DESC, mwl.MachineWorkLog_Id DESC
+        LIMIT 1'
+    );
+    $stmt->execute([
+        ':machineCode' => $machineCode,
+        ':documentDate' => $documentDate,
+    ]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    return (int)$row['MachineWorkLog_Id'];
+}
+
+function ensure_oillog_approval_record(PDO $pdo, int $machineWorkLogId): array
 {
     $token = generate_oillog_approval_token($pdo);
     $expiresAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
     $stmt = $pdo->prepare(
-        'INSERT INTO OilLogApproval (OilLog_Id, Approval_Token, Token_Expires_At)
-        VALUES (:oilLogId, :token, :expires)
+        'INSERT INTO OilLogApproval (MachineWorkLog_Id, Approval_Token, Token_Expires_At)
+        VALUES (:machineWorkLogId, :token, :expires)
         ON DUPLICATE KEY UPDATE
             Approval_Token = VALUES(Approval_Token),
             Token_Expires_At = VALUES(Token_Expires_At),
             Oiler_User_Id = NULL,
             Oiler_Approved_At = NULL,
             Oiler_Remark = NULL,
-            Inspector_User_Id = NULL,
-            Inspector_Approved_At = NULL,
-            Inspector_Remark = NULL,
             Updated_At = CURRENT_TIMESTAMP'
     );
     $stmt->execute([
-        ':oilLogId' => $oilLogId,
+        ':machineWorkLogId' => $machineWorkLogId,
         ':token' => $token,
         ':expires' => $expiresAt,
     ]);
@@ -355,6 +384,24 @@ function transform_oillog_row(array $row): array
         $row['Photo_Attachments'] = is_array($decoded) ? $decoded : [];
         unset($row['Photo_Attachments_JSON']);
     }
+    if (array_key_exists('MWL_Checklist_JSON', $row)) {
+        $decoded = json_decode((string)$row['MWL_Checklist_JSON'], true);
+        $row['MWL_Checklist'] = is_array($decoded) ? $decoded : [];
+        unset($row['MWL_Checklist_JSON']);
+    }
+    if (
+        (!isset($row['Checklist']) || (is_array($row['Checklist']) && count($row['Checklist']) === 0))
+        && isset($row['MWL_Checklist'])
+        && is_array($row['MWL_Checklist'])
+        && count($row['MWL_Checklist']) > 0
+    ) {
+        $row['Checklist'] = $row['MWL_Checklist'];
+    }
+    if (array_key_exists('MWL_Work_Orders_JSON', $row)) {
+        $decoded = json_decode((string)$row['MWL_Work_Orders_JSON'], true);
+        $row['MWL_Work_Orders'] = is_array($decoded) ? $decoded : [];
+        unset($row['MWL_Work_Orders_JSON']);
+    }
     if (
         array_key_exists('Approval_Oiler_Username', $row)
         || array_key_exists('Approval_Oiler_FirstName', $row)
@@ -379,6 +426,24 @@ function transform_oillog_row(array $row): array
         );
         unset($row['Approval_Inspector_Username'], $row['Approval_Inspector_FirstName'], $row['Approval_Inspector_LastName']);
     }
+    if (
+        array_key_exists('MWL_Inspector_Username', $row)
+        || array_key_exists('MWL_Inspector_FirstName', $row)
+        || array_key_exists('MWL_Inspector_LastName', $row)
+    ) {
+        $row['MWL_Inspector_Name'] = compose_center_display_name(
+            $row['MWL_Inspector_Username'] ?? null,
+            $row['MWL_Inspector_FirstName'] ?? null,
+            $row['MWL_Inspector_LastName'] ?? null
+        );
+        unset($row['MWL_Inspector_Username'], $row['MWL_Inspector_FirstName'], $row['MWL_Inspector_LastName']);
+    }
+    if (
+        (!isset($row['Approval_Inspector_Name']) || $row['Approval_Inspector_Name'] === null || $row['Approval_Inspector_Name'] === '')
+        && !empty($row['MWL_Inspector_Name'] ?? '')
+    ) {
+        $row['Approval_Inspector_Name'] = $row['MWL_Inspector_Name'];
+    }
     return $row;
 }
 
@@ -389,19 +454,53 @@ function fetch_oillog(PDO $pdo, int $id): ?array
             apr.Oiler_User_Id AS Approval_Oiler_User_Id,
             apr.Oiler_Approved_At AS Approval_Oiler_Approved_At,
             apr.Oiler_Remark AS Approval_Oiler_Remark,
-            apr.Inspector_User_Id AS Approval_Inspector_User_Id,
-            apr.Inspector_Approved_At AS Approval_Inspector_Approved_At,
-            apr.Inspector_Remark AS Approval_Inspector_Remark,
+            mwlapr.Inspector_User_Id AS Approval_Inspector_User_Id,
+            mwlapr.Inspector_Approved_At AS Approval_Inspector_Approved_At,
+            mwlapr.Inspector_Remark AS Approval_Inspector_Remark,
             oiler.Username AS Approval_Oiler_Username,
             oiler.Name AS Approval_Oiler_FirstName,
             oiler.Lastname AS Approval_Oiler_LastName,
-            inspector.Username AS Approval_Inspector_Username,
-            inspector.Name AS Approval_Inspector_FirstName,
-            inspector.Lastname AS Approval_Inspector_LastName
+            mwlInspector.Username AS Approval_Inspector_Username,
+            mwlInspector.Name AS Approval_Inspector_FirstName,
+            mwlInspector.Lastname AS Approval_Inspector_LastName,
+            mwl.MachineWorkLog_Id AS MWL_Id,
+            mwl.Document_No AS MWL_Document_No,
+            mwl.Meter_Hour AS MWL_Meter_Hour,
+            mwl.Odometer AS MWL_Odometer,
+            mwl.Work_Meter_Start AS MWL_Work_Meter_Start,
+            mwl.Work_Meter_End AS MWL_Work_Meter_End,
+            mwl.Work_Meter_Total AS MWL_Work_Meter_Total,
+            mwl.Work_Order AS MWL_Work_Order,
+            mwl.Work_Orders_JSON AS MWL_Work_Orders_JSON,
+            mwl.Time_Morning_Start AS MWL_Time_Morning_Start,
+            mwl.Time_Morning_End AS MWL_Time_Morning_End,
+            mwl.Time_Morning_Total AS MWL_Time_Morning_Total,
+            mwl.Time_Afternoon_Start AS MWL_Time_Afternoon_Start,
+            mwl.Time_Afternoon_End AS MWL_Time_Afternoon_End,
+            mwl.Time_Afternoon_Total AS MWL_Time_Afternoon_Total,
+            mwl.Time_Ot_Start AS MWL_Time_Ot_Start,
+            mwl.Time_Ot_End AS MWL_Time_Ot_End,
+            mwl.Time_Ot_Total AS MWL_Time_Ot_Total,
+            mwl.Operation_Details AS MWL_Operation_Details,
+            mwl.Checklist_JSON AS MWL_Checklist_JSON,
+            mwlapr.Inspector_User_Id AS MWL_Inspector_User_Id,
+            mwlapr.Inspector_Approved_At AS MWL_Inspector_Approved_At,
+            mwlapr.Inspector_Remark AS MWL_Inspector_Remark,
+            mwlInspector.Username AS MWL_Inspector_Username,
+            mwlInspector.Name AS MWL_Inspector_FirstName,
+            mwlInspector.Lastname AS MWL_Inspector_LastName
         FROM OilLog log
-        LEFT JOIN OilLogApproval apr ON apr.OilLog_Id = log.OilLog_Id
+        LEFT JOIN MachineWorkLog mwl ON mwl.MachineWorkLog_Id = (
+            SELECT mwl2.MachineWorkLog_Id FROM MachineWorkLog mwl2
+            WHERE mwl2.Machine_Code = log.Machine_Code
+                AND mwl2.Document_Date <= log.Document_Date
+            ORDER BY mwl2.Document_Date DESC, mwl2.MachineWorkLog_Id DESC
+            LIMIT 1
+        )
+        LEFT JOIN OilLogApproval apr ON apr.MachineWorkLog_Id = mwl.MachineWorkLog_Id
         LEFT JOIN Center oiler ON oiler.Center_Id = apr.Oiler_User_Id
-        LEFT JOIN Center inspector ON inspector.Center_Id = apr.Inspector_User_Id
+        LEFT JOIN MachineWorkLogApproval mwlapr ON mwlapr.MachineWorkLog_Id = mwl.MachineWorkLog_Id
+        LEFT JOIN Center mwlInspector ON mwlInspector.Center_Id = mwlapr.Inspector_User_Id
         WHERE log.OilLog_Id = :id
         LIMIT 1'
     );
@@ -461,19 +560,53 @@ function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
         apr.Oiler_User_Id AS Approval_Oiler_User_Id,
         apr.Oiler_Approved_At AS Approval_Oiler_Approved_At,
         apr.Oiler_Remark AS Approval_Oiler_Remark,
-        apr.Inspector_User_Id AS Approval_Inspector_User_Id,
-        apr.Inspector_Approved_At AS Approval_Inspector_Approved_At,
-        apr.Inspector_Remark AS Approval_Inspector_Remark,
+        mwlapr.Inspector_User_Id AS Approval_Inspector_User_Id,
+        mwlapr.Inspector_Approved_At AS Approval_Inspector_Approved_At,
+        mwlapr.Inspector_Remark AS Approval_Inspector_Remark,
         oiler.Username AS Approval_Oiler_Username,
         oiler.Name AS Approval_Oiler_FirstName,
         oiler.Lastname AS Approval_Oiler_LastName,
-        inspector.Username AS Approval_Inspector_Username,
-        inspector.Name AS Approval_Inspector_FirstName,
-        inspector.Lastname AS Approval_Inspector_LastName
+        mwlInspector.Username AS Approval_Inspector_Username,
+        mwlInspector.Name AS Approval_Inspector_FirstName,
+        mwlInspector.Lastname AS Approval_Inspector_LastName,
+        mwl.MachineWorkLog_Id AS MWL_Id,
+        mwl.Document_No AS MWL_Document_No,
+        mwl.Meter_Hour AS MWL_Meter_Hour,
+        mwl.Odometer AS MWL_Odometer,
+        mwl.Work_Meter_Start AS MWL_Work_Meter_Start,
+        mwl.Work_Meter_End AS MWL_Work_Meter_End,
+        mwl.Work_Meter_Total AS MWL_Work_Meter_Total,
+        mwl.Work_Order AS MWL_Work_Order,
+        mwl.Work_Orders_JSON AS MWL_Work_Orders_JSON,
+        mwl.Time_Morning_Start AS MWL_Time_Morning_Start,
+        mwl.Time_Morning_End AS MWL_Time_Morning_End,
+        mwl.Time_Morning_Total AS MWL_Time_Morning_Total,
+        mwl.Time_Afternoon_Start AS MWL_Time_Afternoon_Start,
+        mwl.Time_Afternoon_End AS MWL_Time_Afternoon_End,
+        mwl.Time_Afternoon_Total AS MWL_Time_Afternoon_Total,
+        mwl.Time_Ot_Start AS MWL_Time_Ot_Start,
+        mwl.Time_Ot_End AS MWL_Time_Ot_End,
+        mwl.Time_Ot_Total AS MWL_Time_Ot_Total,
+        mwl.Operation_Details AS MWL_Operation_Details,
+        mwl.Checklist_JSON AS MWL_Checklist_JSON,
+        mwlapr.Inspector_User_Id AS MWL_Inspector_User_Id,
+        mwlapr.Inspector_Approved_At AS MWL_Inspector_Approved_At,
+        mwlapr.Inspector_Remark AS MWL_Inspector_Remark,
+        mwlInspector.Username AS MWL_Inspector_Username,
+        mwlInspector.Name AS MWL_Inspector_FirstName,
+        mwlInspector.Lastname AS MWL_Inspector_LastName
     FROM OilLog log
-    LEFT JOIN OilLogApproval apr ON apr.OilLog_Id = log.OilLog_Id
+    LEFT JOIN MachineWorkLog mwl ON mwl.MachineWorkLog_Id = (
+            SELECT mwl2.MachineWorkLog_Id FROM MachineWorkLog mwl2
+            WHERE mwl2.Machine_Code = log.Machine_Code
+                AND mwl2.Document_Date <= log.Document_Date
+            ORDER BY mwl2.Document_Date DESC, mwl2.MachineWorkLog_Id DESC
+            LIMIT 1
+    )
+    LEFT JOIN OilLogApproval apr ON apr.MachineWorkLog_Id = mwl.MachineWorkLog_Id
     LEFT JOIN Center oiler ON oiler.Center_Id = apr.Oiler_User_Id
-    LEFT JOIN Center inspector ON inspector.Center_Id = apr.Inspector_User_Id
+    LEFT JOIN MachineWorkLogApproval mwlapr ON mwlapr.MachineWorkLog_Id = mwl.MachineWorkLog_Id
+    LEFT JOIN Center mwlInspector ON mwlInspector.Center_Id = mwlapr.Inspector_User_Id
     WHERE 1=1';
     $params = [];
 
@@ -879,19 +1012,30 @@ function handle_oillog_post(): void
             ':id' => $id,
         ]);
 
-        $approvalSeed = ensure_oillog_approval_record($pdo, $id);
+        $machineWorkLogId = resolve_machine_work_log_id_for_oillog($pdo, $id);
+        $approvalSeed = null;
+        if ($machineWorkLogId !== null) {
+            $approvalSeed = ensure_oillog_approval_record($pdo, $machineWorkLogId);
+        }
 
         $pdo->commit();
         $item = fetch_oillog($pdo, $id);
-        $approvalPayload = [
-            'token' => $approvalSeed['token'],
-            'expires_at' => $approvalSeed['expires_at'],
-            'path' => sprintf('#/oil-approval?oilLogId=%d&token=%s', $id, $approvalSeed['token']),
-        ];
-        respond_json([
+        $approvalPayload = null;
+        if ($approvalSeed !== null) {
+            $approvalPayload = [
+                'token' => $approvalSeed['token'],
+                'expires_at' => $approvalSeed['expires_at'],
+                'path' => sprintf('#/oil-approval?oilLogId=%d&token=%s', $id, $approvalSeed['token']),
+            ];
+        }
+        $response = [
             'item' => $item,
             'approval' => $approvalPayload,
-        ], 201);
+        ];
+        if ($machineWorkLogId === null) {
+            $response['approval_notice'] = 'ยังไม่พบ Machine Work Log ที่ตรงกับใบงานนี้ จึงยังไม่สร้างลิงก์ยืนยัน';
+        }
+        respond_json($response, 201);
     } catch (Throwable $e) {
         if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
             $pdo->rollBack();
