@@ -66,20 +66,6 @@ export default function MachinesAdmin() {
         return Array.from(set).sort((a, b) => a.localeCompare(b));
     }, [items]);
 
-    const uniqueClasses = useMemo(() => {
-        const set = new Set();
-        const catLower = selectedCategory ? String(selectedCategory).toLowerCase() : '';
-        items.forEach((it) => {
-            if (selectedCategory) {
-                if (String(it.Machine_Type).toLowerCase() !== catLower) return;
-            }
-            if (it.Class !== undefined && it.Class !== null && String(it.Class) !== '') {
-                set.add(String(it.Class));
-            }
-        });
-        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    }, [items, selectedCategory]);
-
     const [filterType, setFilterType] = useState('');
     const [filterClass, setFilterClass] = useState('');
     const [sortOrder, setSortOrder] = useState('az');
@@ -320,6 +306,16 @@ export default function MachinesAdmin() {
                                 ย้อนกลับ
                             </button>
                         </div>
+                        <button className="button primary" type="button" onClick={handleExcelButton} disabled={bulkUploading}>
+                                    {bulkUploading ? 'กำลังอัปโหลด…' : 'อัปโหลด Excel/CSV'}
+                                </button>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".xlsx,.xls,.csv"
+                                    style={{ display: 'none' }}
+                                    onChange={handleExcelFile}
+                                />
                     </section>
                 </div>
                 <section className="categories-page">
@@ -373,6 +369,16 @@ export default function MachinesAdmin() {
                             <button className="button ghost" type="button" onClick={() => navigate('/admin/machines')}>
                                 ย้อนกลับ
                             </button>
+                            <button className="button primary" type="button" onClick={handleExcelButton} disabled={bulkUploading}>
+                                    {bulkUploading ? 'กำลังอัปโหลด…' : 'อัปโหลด Excel/CSV'}
+                                </button>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".xlsx,.xls,.csv"
+                                    style={{ display: 'none' }}
+                                    onChange={handleExcelFile}
+                                />
                         </div>
                     </section>
                 </div>

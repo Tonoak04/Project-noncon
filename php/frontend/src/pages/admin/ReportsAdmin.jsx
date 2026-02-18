@@ -177,19 +177,6 @@ export default function ReportsAdmin() {
         };
     }, [limit, reloadKey]);
 
-    const centerOptions = useMemo(() => {
-        const options = new Map();
-        reports.forEach((report) => {
-            const id = report.Center_Id || 'unknown';
-            const key = String(id);
-            const label = report.CenterName || (report.Center_Id ? `ศูนย์ ${report.Center_Id}` : 'ไม่ระบุศูนย์');
-            if (!options.has(key)) {
-                options.set(key, label);
-            }
-        });
-        return Array.from(options.entries()).map(([value, label]) => ({ value, label }));
-    }, [reports]);
-
     const filteredReports = useMemo(() => {
         const search = searchTerm.trim().toLowerCase();
         return reports.filter((report) => {

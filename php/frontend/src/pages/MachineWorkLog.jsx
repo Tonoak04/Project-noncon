@@ -718,7 +718,9 @@ export default function MachineWorkLog() {
         <div className="portal">
             <section className="machine-work-page">
                 <div className="page-banner">
-                    <Link to="/worksite" className="back-link">ย้อนกลับ</Link>
+                    <Link to="/worksite" className="back-link">
+                    ย้อนกลับ
+                    </Link>
                     <div>
                         <h2>บันทึกการทำงานของเครื่องจักร</h2>
                     </div>

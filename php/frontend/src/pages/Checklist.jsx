@@ -24,7 +24,6 @@ export default function Checklist() {
     const { user, logout } = useAuth();
     const pickerRef = useRef(null);
     const periodInputRef = useRef(null);
-
     const [metaForm, setMetaForm] = useState(() => defaultMetaForm());
     const [machines, setMachines] = useState([]);
     const [machineLoading, setMachineLoading] = useState(false);
@@ -32,28 +31,24 @@ export default function Checklist() {
     const [vehicleType, setVehicleType] = useState('-');
     const [showOptions, setShowOptions] = useState(false);
     const [highlightIndex, setHighlightIndex] = useState(0);
-
     const [checklistLoading, setChecklistLoading] = useState(false);
     const [checklistError, setChecklistError] = useState('');
     const [issueNotes, setIssueNotes] = useState('');
     const [savedIssueNotes, setSavedIssueNotes] = useState('');
     const [selectedMachineId, setSelectedMachineId] = useState(null);
     const [status, setStatus] = useState('idle');
-
     const [foremanSignatures, setForemanSignatures] = useState({});
     const [foremanSignatureLabels, setForemanSignatureLabels] = useState({});
     const [foremanLockedDays, setForemanLockedDays] = useState(() => new Set());
     const [pendingForemanDays, setPendingForemanDays] = useState(() => new Set());
-
     const [driverSignatures, setDriverSignatures] = useState({});
     const [driverSignatureLabels, setDriverSignatureLabels] = useState({});
     const [driverLockedDays, setDriverLockedDays] = useState(() => new Set());
     const [pendingDriverSignatureDays, setPendingDriverSignatureDays] = useState(() => new Set());
-
     const [checklistValues, setChecklistValues] = useState({});
     const [lockedChecklistCells, setLockedChecklistCells] = useState(() => new Set());
     const [pendingChecklistCells, setPendingChecklistCells] = useState(() => new Set());
-
+    
     const currentPeriod = useMemo(() => {
         const now = new Date();
         const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -76,12 +71,10 @@ export default function Checklist() {
     const isOperator = hasRole('operator');
     const canAccessChecklist = Boolean(user) && (isDriver || isForeman || isOperator || isAdmin);
     const isOnlyView = !isDriver && !isForeman && !isAdmin && isOperator;
-
     const trimmedMachineCode = metaForm.machineCode.trim();
     const trimmedDepartment = metaForm.department.trim();
     const isMetaComplete = Boolean(trimmedMachineCode && trimmedDepartment && metaForm.period);
     const shouldShowChecklistTable = isMetaComplete;
-
     const machineOptions = useMemo(() => machines, [machines]);
     const filteredMachineOptions = useMemo(() => {
         const query = metaForm.machineCode.trim().toLowerCase();

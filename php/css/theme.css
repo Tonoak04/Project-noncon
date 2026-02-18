@@ -232,6 +232,39 @@ header[class*="admin-"][class*="-hero"] {
     }
 }
 
+.site-shell--edge,
+.site-shell--home {
+    background-color: #030b14;
+    min-height: 100vh;
+}
+
+.site-shell--edge > .layout,
+.site-shell--home > .layout {
+    min-height: inherit;
+}
+
+@supports (min-height: 100svh) {
+    .site-shell--edge,
+    .site-shell--home,
+    .site-shell--edge > .layout,
+    .site-shell--home > .layout,
+    .login-shell,
+    .home-hero {
+        min-height: 100svh;
+    }
+}
+
+@supports (min-height: 100dvh) {
+    .site-shell--edge,
+    .site-shell--home,
+    .site-shell--edge > .layout,
+    .site-shell--home > .layout,
+    .login-shell,
+    .home-hero {
+        min-height: 100dvh;
+    }
+}
+
 .login-shell {
     position: relative;
     min-height: 100vh;

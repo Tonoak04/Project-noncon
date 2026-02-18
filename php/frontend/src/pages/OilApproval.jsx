@@ -216,7 +216,6 @@ export default function OilApproval() {
 
     useEffect(() => {
         fetchContext();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [oilLogId, token]);
 
     const handleConfirm = async (approvalType) => {
@@ -252,7 +251,6 @@ export default function OilApproval() {
     const tankBefore = resolveTankValue(oilLog, 'tank_before_liters');
     const tankAfter = resolveTankValue(oilLog, 'tank_after_liters');
     const oilerDone = Boolean(approval?.oiler?.approved_at);
-    const inspectorDone = Boolean(approval?.inspector?.approved_at);
     const statusTiles = [
         {
             key: 'oiler',

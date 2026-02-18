@@ -148,7 +148,6 @@ export default function UsersAdmin() {
     };
 
     const handleRolesSelectChange = (event) => {
-        // Support both the old <select multiple> and the new checkbox inputs
         if (event.target.type === 'checkbox') {
             const roleValue = event.target.value;
             const checked = event.target.checked;

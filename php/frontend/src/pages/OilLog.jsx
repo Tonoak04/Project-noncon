@@ -17,8 +17,6 @@ import { useAuth } from '../context/AuthContext.jsx';
 import oil from '../images/oil.jpg';
 
 
-const workTypes = ['งานปกติ', 'งานพิเศษ', 'งานซ่อมบำรุง'];
-const checklistStatuses = ['ปกติ', 'ผิดปกติ'];
 const MAX_PHOTO_ATTACHMENTS = 5;
 const MAX_PHOTO_SIZE_MB = 8;
 const MAX_PHOTO_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
@@ -186,8 +184,6 @@ const formatFileSize = (bytes) => {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
-const sanitizeManualTimeInput = (value) => value.replace(/[^0-9:.\s]/g, '').replace(/\s+/g, '');
-
 const parseTimeToMinutes = (value) => {
     if (!value) {
         return null;
@@ -248,19 +244,6 @@ const clockStringToDecimalHours = (value) => {
         return null;
     }
     return Number((minutes / 60).toFixed(2));
-};
-
-const calculateTimeDurationHours = (start, end) => {
-    const startMinutes = parseTimeToMinutes(start);
-    const endMinutes = parseTimeToMinutes(end);
-    if (startMinutes === null || endMinutes === null) {
-        return '';
-    }
-    let diff = endMinutes - startMinutes;
-    if (diff < 0) {
-        diff += 24 * 60;
-    }
-    return formatMinutesToClock(diff);
 };
 
 const formatDateTimeLocal = (input = new Date()) => {
@@ -834,89 +817,6 @@ export default function OilLog() {
         }
     };
 
-    const handleMeterChange = (field) => (event) => {
-        const value = event.target.value;
-        setForm((prev) => {
-            const next = { ...prev, [field]: value };
-            if (field === 'workMeterStart' || field === 'workMeterEnd') {
-                const start = parseFloat(next.workMeterStart);
-                const end = parseFloat(next.workMeterEnd);
-                if (!Number.isNaN(start) && !Number.isNaN(end)) {
-                    next.workMeterTotal = (end - start).toFixed(2);
-                }
-            }
-            return next;
-        });
-    };
-
-    const handleTimeFieldChange = (segmentKey, type) => (event) => {
-        const rawValue = event.target.value;
-        const sanitizedValue = sanitizeManualTimeInput(rawValue);
-        const startField = `time${segmentKey}Start`;
-        const endField = `time${segmentKey}End`;
-        const totalField = `time${segmentKey}Total`;
-        const targetField = type === 'start' ? startField : (type === 'end' ? endField : totalField);
-        setForm((prev) => {
-            const next = { ...prev };
-            if (type === 'total') {
-                if (!sanitizedValue) {
-                    next[targetField] = '';
-                } else {
-                    const manualMinutes = parseTimeToMinutes(sanitizedValue);
-                    next[targetField] = manualMinutes === null ? sanitizedValue : formatMinutesToClock(manualMinutes);
-                }
-                return next;
-            }
-            if (!sanitizedValue) {
-                next[targetField] = '';
-            } else {
-                const manualMinutes = parseTimeToMinutes(sanitizedValue);
-                next[targetField] = manualMinutes === null ? sanitizedValue : formatMinutesToClock(manualMinutes);
-            }
-            if (type === 'start' || type === 'end') {
-                const startVal = next[startField];
-                const endVal = next[endField];
-                if (startVal && endVal) {
-                    next[totalField] = calculateTimeDurationHours(startVal, endVal);
-                } else {
-                    next[totalField] = '';
-                }
-            }
-            return next;
-        });
-    };
-
-    const handleChecklistChange = (itemId, status) => {
-        setForm((prev) => {
-            const next = {
-                ...prev,
-                checklist: {
-                    ...prev.checklist,
-                    [itemId]: status,
-                },
-            };
-            if (itemId === oilChecklistOtherId && status === '') {
-                next.checklistOtherNote = '';
-            }
-            return next;
-        });
-    };
-
-    const handleChecklistOtherNoteChange = (event) => {
-        const value = event.target.value;
-        setForm((prev) => {
-            if (prev.checklist[oilChecklistOtherId] !== 'เลือก') {
-                return prev;
-            }
-            return { ...prev, checklistOtherNote: value };
-        });
-    };
-
-    const handleChecklistSingleToggle = (itemId) => (event) => {
-        const checked = event.target.checked;
-        handleChecklistChange(itemId, checked ? 'เลือก' : '');
-    };
-
     const handlePhotoChange = (event) => {
         const files = Array.from(event.target.files || []);
         if (!files.length) {
@@ -1101,7 +1001,7 @@ export default function OilLog() {
                         ย้อนกลับ
                     </Link>
                     <div>
-                        <h2>ใบรายงานการปฏิบัติงานและบันทึกน้ำมัน</h2>
+                        <h2>ใบรายงานการบันทึกน้ำมัน</h2>
                     </div>
                 </div>
                 <div className="oil-log-layout">

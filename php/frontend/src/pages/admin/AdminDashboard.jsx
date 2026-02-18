@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { actionCards as defaultActionCards } from '../../data/machines.js';
 
 export default function AdminDashboard() {
     const navigate = useNavigate();

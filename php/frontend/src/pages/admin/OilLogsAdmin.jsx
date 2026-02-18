@@ -53,23 +53,6 @@ const describePersonTimestamp = (value, prefix) => {
     return `${prefix} ${formatted}`;
 };
 
-const compactMachineLabel = (row) => {
-    if (!row) return '-';
-    const code = row.Machine_Code || (row.Machine_Id ? `ID ${row.Machine_Id}` : '-');
-    const description = row.Machine_Description || row.Machine_Name || row.Operation_Details;
-    return description ? `${code} · ${description}` : code;
-};
-
-const describeFuelKind = (row) => {
-    if (!row) return 'ไม่ระบุชนิดน้ำมัน';
-    return row.Fuel_Type || 'ไม่ระบุชนิดน้ำมัน';
-};
-
-const describeOperator = (row) => {
-    if (!row) return 'ไม่ระบุผู้รับผิดชอบ';
-    return row.Operator_Name || row.Assistant_Name || row.Requester_Name || 'ไม่ระบุผู้รับผิดชอบ';
-};
-
 const formatDateDMY = (value) => {
     if (!value) return '-';
     const date = new Date(value);
@@ -142,15 +125,7 @@ export default function OilLogsAdmin() {
             };
         });
     }, [selected]);
-
-    const totalTimeHours = timeDetails.reduce((sum, row) => {
-        const value = parseFloat(row.total);
-        if (Number.isNaN(value)) {
-            return sum;
-        }
-        return sum + value;
-    }, 0);
-
+    
     const hasOilTimeSegments = timeDetails.some((row) => (
         Boolean(row.start || row.end || (row.total !== null && row.total !== undefined && row.total !== ''))
     ));
