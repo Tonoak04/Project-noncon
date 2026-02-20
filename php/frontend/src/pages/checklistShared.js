@@ -162,7 +162,7 @@ export const CHECKLIST_TABLE_STYLES = `
         padding: 1.5rem;
         border-radius: 18px;
         background: linear-gradient(135deg, #0f172a, #1e3a8a);
-        color: #fff;
+        color: #0f233a;
         margin-bottom: 1.25rem;
         box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);
     }

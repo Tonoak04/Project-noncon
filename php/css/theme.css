@@ -467,7 +467,7 @@ header[class*="admin-"][class*="-hero"] {
 .picker-option.active,
 .picker-option[aria-selected="true"] {
     background: #0f3e68;
-    color: #fff;
+    color: #0f233a;
 }
 .picker-option strong {
     display: block;

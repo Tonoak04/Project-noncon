@@ -275,7 +275,7 @@ export default function UsersAdmin() {
                     </div>
                     <div className="page-banner__actions admin-hero-actions">
                         <button className="button ghost" type="button" onClick={() => navigate('/admin')}>
-                            ย้อนกลับ
+                            กลับสู่แดชบอร์ด
                         </button>
                         <button type="button" className="button ghost" onClick={() => navigate('/admin/users/all')}>
                             ดูรายชื่อทั้งหมด

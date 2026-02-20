@@ -10,7 +10,6 @@ import OilLog from './pages/OilLog.jsx';
 import OilApproval from './pages/OilApproval.jsx';
 import MachineWorkLog from './pages/MachineWorkLog.jsx';
 import MachineWorkApproval from './pages/MachineWorkApproval.jsx';
-// import MachineWorkLogAdmin from './pages/admin/MachineWorkLogAdmin.jsx';
 import Reports from './pages/Reports.jsx';
 import Checklist from './pages/Checklist.jsx';
 import ChecklistAdmin from './pages/admin/ChecklistAdmin.jsx';
@@ -123,14 +122,6 @@ function AppShell() {
                             </ProtectedRoute>
                         }
                     />
-                    {/* <Route
-                        path="/admin/MachineWorkLog"
-                        element={
-                            <ProtectedRoute>
-                                <MachineWorkLogAdmin />
-                            </ProtectedRoute>
-                        }
-                    /> */}
                     <Route
                         path="/admin/checklist"
                         element={
