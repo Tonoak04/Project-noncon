@@ -320,6 +320,7 @@ function mwl_fetch_logs(PDO $pdo, array $filters, ?int $limit = 50): array
 {
     $sql = 'SELECT
         log.*,
+        log.Project_Name,
         apr.Approval_Token,
         apr.Token_Expires_At,
         apr.Inspector_User_Id AS Approval_Inspector_User_Id,
@@ -364,6 +365,7 @@ function mwl_fetch_logs(PDO $pdo, array $filters, ?int $limit = 50): array
             OR log.Machine_Name LIKE :search
             OR log.Machine_Description LIKE :search
             OR log.Work_Order LIKE :search
+            OR log.Project_Name LIKE :search
             OR log.Operation_Details LIKE :search
             OR log.Created_By LIKE :search
         )';
@@ -461,6 +463,7 @@ function handle_machine_work_log_post(): void
     $documentDate = mwl_normalize_datetime($payload['documentDate'] ?? date('Y-m-d H:i:s'));
     $workOrders = mwl_normalize_work_orders($payload['workOrders'] ?? ($payload['workOrder'] ?? []));
     $workOrder = $workOrders[0] ?? mwl_normalize_string($payload['workOrder'] ?? null, 100);
+    $projectName = mwl_normalize_string($payload['projectName'] ?? null, 255);
     $machineCode = mwl_normalize_string($payload['machineCode'] ?? null, 50);
     $machineName = mwl_normalize_string($payload['machineName'] ?? null, 120);
     $machineDescription = mwl_normalize_string($payload['machineDescription'] ?? null, 255);
@@ -612,6 +615,7 @@ function handle_machine_work_log_post(): void
             Document_No,
             Document_Date,
             Work_Order,
+            Project_Name,
             Work_Orders_JSON,
             Machine_Code,
             Machine_Name,
@@ -638,6 +642,7 @@ function handle_machine_work_log_post(): void
             :document_no,
             :document_date,
             :work_order,
+            :project_name,
             :work_orders_json,
             :machine_code,
             :machine_name,
@@ -665,6 +670,7 @@ function handle_machine_work_log_post(): void
             ':document_no' => $documentNo,
             ':document_date' => $documentDate,
             ':work_order' => $workOrder,
+            ':project_name' => $projectName,
             ':work_orders_json' => $workOrdersJson,
             ':machine_code' => $machineCode,
             ':machine_name' => $machineName,

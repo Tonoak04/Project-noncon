@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS `MachineWorkLog` (
   `Document_No` VARCHAR(50) DEFAULT NULL,
   `Document_Date` DATETIME NOT NULL,
   `Work_Order` VARCHAR(100) DEFAULT NULL,
+  `Project_Name` VARCHAR(255) DEFAULT NULL,
   `Work_Orders_JSON` TEXT DEFAULT NULL,
   `Machine_Code` VARCHAR(50) DEFAULT NULL,
   `Machine_Name` VARCHAR(120) DEFAULT NULL,

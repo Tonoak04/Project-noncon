@@ -4,7 +4,7 @@ import { apiDelete, apiGet } from '../../api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 const roleDictionary = {
     admin: 'ผู้ดูแลระบบ',
-    operator: 'ผู้ใช้งานดูได้ทั้งเว็บ',
+    operator: 'ผู้ทดลองระบบ',
     assistant: 'ผู้ตรวจสอบ(น้ำมัน)',
     driver: 'พลขับรถ',
     foreman: 'ผู้ตรวจสอบ(รถ)',
@@ -289,7 +289,7 @@ export default function UsersDirectory() {
                     </div>
                     <div className="page-banner__actions admin-hero-actions">
                         <button className="button ghost" type="button" onClick={() => navigate('/admin')}>
-                            กลับสู่แดชบอร์ด
+                            ย้อนกลับ
                         </button>
                         <button type="button" className="button ghost" onClick={() => navigate('/admin/users')}>
                             + เพิ่มผู้ใช้งาน

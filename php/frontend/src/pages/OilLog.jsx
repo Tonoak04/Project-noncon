@@ -21,14 +21,25 @@ const MAX_PHOTO_ATTACHMENTS = 5;
 const MAX_PHOTO_SIZE_MB = 8;
 const MAX_PHOTO_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
 const operatorRoleKeys = ['operator', 'driver'];
-const APPROVAL_IP_HOST = '172.16.3.106';
+const BASE_PUMP_LOCATION_OPTIONS = ['ปั้มในบริษัท'];
+const resolveApprovalHost = () => {
+    const envHost = typeof import.meta !== 'undefined' ? (import.meta.env?.VITE_APPROVAL_HOST || import.meta.env?.VITE_API_HOST || '') : '';
+    const trimmedEnv = envHost ? envHost.trim() : '';
+    if (trimmedEnv) return trimmedEnv.replace(/\/$/, '');
+    if (typeof window !== 'undefined' && window.location?.hostname) {
+        return window.location.hostname;
+    }
+    return 'localhost';
+};
+
 const resolveApprovalOrigin = () => {
     if (typeof window === 'undefined') {
         return '';
     }
     const protocol = window.location?.protocol || 'http:';
     const portSegment = window.location?.port ? `:${window.location.port}` : '';
-    return `${protocol}//${APPROVAL_IP_HOST}${portSegment}`;
+    const host = resolveApprovalHost();
+    return `${protocol}//${host}${portSegment}`;
 };
 const approvalModalStyles = {
     backdrop: {
@@ -323,6 +334,7 @@ export default function OilLog() {
     const [machines, setMachines] = useState([]);
     const [projectOptions, setProjectOptions] = useState([]);
     const [projectIsOther, setProjectIsOther] = useState(false);
+    const [locationIsOther, setLocationIsOther] = useState(false);
     const [logs, setLogs] = useState([]);
     const [summary, setSummary] = useState({ count: 0, total_liters: 0 });
     const [loadingLogs, setLoadingLogs] = useState(true);
@@ -1054,7 +1066,35 @@ export default function OilLog() {
                             </label>
                             <label>
                                 ปั้มน้ำมันในบริษัท/ภายนอก
-                                <input type="text" value={form.locationName} onChange={handleChange('locationName')} placeholder="เช่น ปั๊มบางจาก สาขาอโศก" required/>
+                                <select
+                                    value={locationIsOther ? '__other__' : (form.locationName || '')}
+                                    onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (v === '__other__') {
+                                            setLocationIsOther(true);
+                                            setForm((p) => ({ ...p, locationName: '' }));
+                                        } else {
+                                            setLocationIsOther(false);
+                                            setForm((p) => ({ ...p, locationName: v }));
+                                        }
+                                    }}
+                                    required={!locationIsOther}
+                                >
+                                    <option value="">เลือกสถานที่เติมน้ำมัน</option>
+                                    {BASE_PUMP_LOCATION_OPTIONS.map((name) => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                                    <option value="__other__">ปั้มนอกบริษัท</option>
+                                </select>
+                                {locationIsOther && (
+                                    <input
+                                        type="text"
+                                        value={form.locationName}
+                                        onChange={handleChange('locationName')}
+                                        placeholder="เช่น ปั๊มบางจาก สาขาอโศก"
+                                        required
+                                    />
+                                )}
                             </label>
                         </div>
                         <header>
@@ -1078,6 +1118,7 @@ export default function OilLog() {
                                             aria-controls="machine-picker-options"
                                             aria-autocomplete="list"
                                             autoComplete="off"
+                                            required
                                         />
                                         {showMachineOptions && filteredMachineOptions.length > 0 && (
                                             <ul className="picker-options" id="machine-picker-options" role="listbox">

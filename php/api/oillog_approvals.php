@@ -43,7 +43,7 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
             log.Work_Order,
             log.Supervisor_Name,
             log.Notes,
-            mwl.MachineWorkLog_Id,
+            COALESCE(apr.MachineWorkLog_Id, fallback_mwl.MachineWorkLog_Id) AS Resolved_MachineWorkLog_Id,
             apr.Approval_Token,
             apr.Token_Expires_At,
             apr.Oiler_User_Id,
@@ -59,18 +59,19 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
             inspector.Name AS Inspector_Name,
             inspector.Lastname AS Inspector_Lastname
         FROM OilLog log
-        LEFT JOIN MachineWorkLog mwl ON mwl.MachineWorkLog_Id = (
+        LEFT JOIN OilLogApproval apr ON apr.OilLog_Id = log.OilLog_Id AND apr.Approval_Token = :token
+        LEFT JOIN MachineWorkLog fallback_mwl ON fallback_mwl.MachineWorkLog_Id = (
             SELECT mwl2.MachineWorkLog_Id FROM MachineWorkLog mwl2
             WHERE mwl2.Machine_Code = log.Machine_Code
-                AND mwl2.Document_Date <= log.Document_Date
-            ORDER BY mwl2.Document_Date DESC, mwl2.MachineWorkLog_Id DESC
+                AND DATE(mwl2.Document_Date) = DATE(log.Document_Date)
+            ORDER BY mwl2.MachineWorkLog_Id DESC
             LIMIT 1
         )
-        LEFT JOIN OilLogApproval apr ON apr.MachineWorkLog_Id = mwl.MachineWorkLog_Id
+        LEFT JOIN MachineWorkLog mwl ON mwl.MachineWorkLog_Id = COALESCE(apr.MachineWorkLog_Id, fallback_mwl.MachineWorkLog_Id)
         LEFT JOIN MachineWorkLogApproval mwlapr ON mwlapr.MachineWorkLog_Id = mwl.MachineWorkLog_Id
         LEFT JOIN Center oiler ON oiler.Center_Id = apr.Oiler_User_Id
         LEFT JOIN Center inspector ON inspector.Center_Id = mwlapr.Inspector_User_Id
-        WHERE log.OilLog_Id = :id AND apr.Approval_Token = :token
+        WHERE log.OilLog_Id = :id AND apr.Approval_Token IS NOT NULL
         LIMIT 1'
     );
     $stmt->execute([
@@ -89,7 +90,7 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
     if ($inspectorName === '') {
         $inspectorName = $row['Inspector_Username'] ?? null;
     }
-    $machineWorkLogId = $row['MachineWorkLog_Id'] !== null ? (int)$row['MachineWorkLog_Id'] : null;
+    $machineWorkLogId = $row['Resolved_MachineWorkLog_Id'] !== null ? (int)$row['Resolved_MachineWorkLog_Id'] : null;
     return [
         'oilLog' => [
             'id' => (int)$row['OilLog_Id'],
@@ -198,22 +199,19 @@ function handle_post_request(): void
         return;
     }
     $machineWorkLogId = $context['machineWorkLog']['id'] ?? null;
-    if (!$machineWorkLogId) {
-        respond_json(['error' => 'ยังไม่มี Machine Work Log ที่สอดคล้องกับใบงานนี้'], 409);
-        return;
-    }
     $now = date('Y-m-d H:i:s');
     if ($approvalType === 'oiler') {
         if (!empty($context['approval']['oiler']['approved_at'])) {
             respond_json(['error' => 'พนักงานออยเลอร์ยืนยันแล้ว'], 409);
             return;
         }
-        $stmt = $pdo->prepare('UPDATE OilLogApproval SET Oiler_User_Id = :userId, Oiler_Approved_At = :ts, Oiler_Remark = :remark, Updated_At = CURRENT_TIMESTAMP WHERE MachineWorkLog_Id = :machineWorkLogId AND Approval_Token = :token');
+        $stmt = $pdo->prepare('UPDATE OilLogApproval SET Oiler_User_Id = :userId, Oiler_Approved_At = :ts, Oiler_Remark = :remark, MachineWorkLog_Id = COALESCE(MachineWorkLog_Id, :machineWorkLogId), Updated_At = CURRENT_TIMESTAMP WHERE OilLog_Id = :oilLogId AND Approval_Token = :token');
         $stmt->execute([
             ':userId' => $user['Center_Id'] ?? null,
             ':ts' => $now,
             ':remark' => $remark,
             ':machineWorkLogId' => $machineWorkLogId,
+            ':oilLogId' => $oilLogId,
             ':token' => $token,
         ]);
     } else {

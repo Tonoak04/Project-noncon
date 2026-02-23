@@ -179,14 +179,6 @@ function AppShell() {
                             }
                         />
                     <Route
-                        path="/scanner"
-                        element={
-                            <ProtectedRoute>
-                                <Scanner />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
                         path="/oil-log"
                         element={
                             <ProtectedRoute>
@@ -199,6 +191,22 @@ function AppShell() {
                         element={
                             <ProtectedRoute>
                                 <MachineWorkLog />
+                            </ProtectedRoute>
+                        }
+                    />
+                        <Route
+                            path="/checklist"
+                            element={
+                                <ProtectedRoute>
+                                    <Checklist />
+                                </ProtectedRoute>
+                            }
+                        />
+                    <Route
+                        path="/scanner"
+                        element={
+                            <ProtectedRoute>
+                                <Scanner />
                             </ProtectedRoute>
                         }
                     />
@@ -225,16 +233,8 @@ function AppShell() {
                                 <Reports />
                             </ProtectedRoute>
                         }
-                    />
-                    <Route
-                        path="/checklist"
-                        element={
-                            <ProtectedRoute>
-                                <Checklist />
-                            </ProtectedRoute>
-                        }
-                    />
-                </Routes>
+                        />
+                    </Routes>
             </div>
         </div>
     );

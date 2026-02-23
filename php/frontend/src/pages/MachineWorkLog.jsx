@@ -9,6 +9,7 @@ import {
     createChecklistState,
     oilChecklistOtherId,
 } from '../data/oilLog.js';
+import { BASE_DEPARTMENT_OPTIONS } from './checklistShared.js';
 
 export default function MachineWorkLog() {
     const { user } = useAuth();
@@ -85,12 +86,22 @@ export default function MachineWorkLog() {
         return parts.length ? `${base || 'ไม่ระบุชื่อ'} · ${parts.join(' · ')}` : (base || 'ไม่ระบุชื่อ');
     };
 
-    const APPROVAL_IP_HOST = '172.16.3.106';
+    const resolveApprovalHost = () => {
+        const envHost = typeof import.meta !== 'undefined' ? (import.meta.env?.VITE_APPROVAL_HOST || import.meta.env?.VITE_API_HOST || '') : '';
+        const trimmedEnv = envHost ? envHost.trim() : '';
+        if (trimmedEnv) return trimmedEnv.replace(/\/$/, '');
+        if (typeof window !== 'undefined' && window.location?.hostname) {
+            return window.location.hostname;
+        }
+        return 'localhost';
+    };
+
     const resolveApprovalOrigin = () => {
         if (typeof window === 'undefined') return '';
         const protocol = window.location?.protocol || 'http:';
         const portSegment = window.location?.port ? `:${window.location.port}` : '';
-        return `${protocol}//${APPROVAL_IP_HOST}${portSegment}`;
+        const host = resolveApprovalHost();
+        return `${protocol}//${host}${portSegment}`;
     };
 
     const approvalModalStyles = {
@@ -186,6 +197,7 @@ export default function MachineWorkLog() {
     const [approvalPreview, setApprovalPreview] = useState({ visible: false, url: '', token: '', expiresAt: '', oilLogId: null });
     const [approvalCopyFeedback, setApprovalCopyFeedback] = useState('');
     const [approvalQrDataUrl, setApprovalQrDataUrl] = useState('');
+    const [projectOptions, setProjectOptions] = useState([]);
     const [approvalStatus, setApprovalStatus] = useState(null);
     const approvalWatcherRef = useRef(null);
 
@@ -281,6 +293,45 @@ export default function MachineWorkLog() {
         return `${hours} ชั่วโมง`;
     }, [approvalPreview.expiresAt]);
 
+    useEffect(() => {
+        if (!approvalPreview.visible || !approvalPreview.token || !approvalPreview.oilLogId) {
+            stopApprovalWatcher();
+            return;
+        }
+        let cancelled = false;
+
+        const fetchStatus = async () => {
+            try {
+                const data = await apiGet(`/api/machine_work_log_approvals.php?machineWorkLogId=${approvalPreview.oilLogId}&token=${approvalPreview.token}`);
+                if (cancelled) return;
+                setApprovalStatus({
+                    inspectorName: data?.approval?.inspector?.full_name || '',
+                    inspectorDone: Boolean(data?.approval?.inspector?.approved_at),
+                    fetchedAt: Date.now(),
+                });
+            } catch (err) {
+                if (!cancelled && err?.name !== 'AbortError') {
+                    setApprovalStatus((prev) => (prev ? { ...prev, error: err.message || 'โหลดสถานะไม่สำเร็จ' } : { error: err.message || 'โหลดสถานะไม่สำเร็จ' }));
+                }
+            }
+        };
+
+        fetchStatus();
+        stopApprovalWatcher();
+        approvalWatcherRef.current = window.setInterval(fetchStatus, 5000);
+
+        return () => {
+            cancelled = true;
+            stopApprovalWatcher();
+        };
+    }, [approvalPreview.visible, approvalPreview.token, approvalPreview.oilLogId]);
+
+    useEffect(() => {
+        if (approvalStatus?.inspectorDone) {
+            stopApprovalWatcher();
+        }
+    }, [approvalStatus?.inspectorDone]);
+
     const operatorDefaults = useMemo(() => resolveOperatorDefaults(user), [user]);
 
     const [form, setForm] = useState(() => ({
@@ -288,6 +339,7 @@ export default function MachineWorkLog() {
         machineCode: '',
         machineName: '',
         machineDescription: '',
+        projectName: '',
         workOrder: '',
         workOrders: [''],
         operatorName: operatorDefaults.operatorName || '',
@@ -359,6 +411,12 @@ export default function MachineWorkLog() {
             } catch (_) {
             }
         })();
+        try {
+            const list = Array.isArray(BASE_DEPARTMENT_OPTIONS) ? BASE_DEPARTMENT_OPTIONS.slice() : [];
+            setProjectOptions(list);
+        } catch (_) {
+            setProjectOptions([]);
+        }
     }, []);
 
     useEffect(() => {
@@ -660,6 +718,30 @@ export default function MachineWorkLog() {
         setSaving(true);
         setError('');
         try {
+            const hasMeterHour = String(form.meterHour || '').trim() !== '';
+            const hasOdometer = String(form.odometer || '').trim() !== '';
+            if (!hasMeterHour && !hasOdometer) {
+                setError('กรุณากรอกเลขชั่วโมง (HR) หรือเลขไมล์ (KM) อย่างน้อย 1 รายการ');
+                return;
+            }
+
+            const hasAnyTimeSegment = (Array.isArray(oilTimeSegments) ? oilTimeSegments : []).some((segment) => {
+                const start = String(form[`time${segment.key}Start`] || '').trim();
+                const end = String(form[`time${segment.key}End`] || '').trim();
+                return start !== '' && end !== '';
+            });
+            if (!hasAnyTimeSegment) {
+                setError('กรุณากรอกเวลาปฏิบัติงานอย่างน้อย 1 ช่วง (เริ่มงาน และ เลิกงาน)');
+                return;
+            }
+
+            const requiredChecklistItems = (Array.isArray(oilChecklistItems) ? oilChecklistItems : []).filter((item) => item.id !== oilChecklistOtherId);
+            const allRequiredChecklistSelected = requiredChecklistItems.every((item) => String((form.checklist || {})[item.id] || '').trim() !== '');
+            if (!allRequiredChecklistSelected) {
+                setError('กรุณาเลือกสถานะของรายการตรวจเช็คทุกข้อ (ยกเว้น "อื่นๆ")');
+                return;
+            }
+
             const payload = { ...form };
             if (!Array.isArray(payload.workOrders)) {
                 payload.workOrders = Array.isArray(form.workOrders) ? form.workOrders : (form.workOrders ? [form.workOrders] : []);
@@ -700,6 +782,7 @@ export default function MachineWorkLog() {
                 operationDetails: '',
                 meterHour: '',
                 odometer: '',
+                projectName: '',
                 workOrder: '',
                 workOrders: [''],
                 workMeterStart: '',
@@ -803,9 +886,24 @@ export default function MachineWorkLog() {
                                 </div>
                             </label>
                         </div>
+                        <div className="grid three-cols">
+                            <label>
+                                โครงการ/หน่วยงาน
+                                <select
+                                    value={form.projectName || ''}
+                                    onChange={(e) => setForm((p) => ({ ...p, projectName: e.target.value }))}
+                                    required
+                                >
+                                    <option value="">เลือกโครงการ/หน่วยงาน</option>
+                                    {(projectOptions || []).map((name) => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
                         <div>
                             <label>
-                                WBS / รหัสงาน
+                                WBS / ขั้นตอนการทำงาน
                             </label>
                             <div className="dynamic-list">
                                 {form.workOrders.map((wo, idx) => (
@@ -855,13 +953,25 @@ export default function MachineWorkLog() {
                         <div className="grid three-cols">
                             <label>
                                 เลขชั่วโมง (HR)
-                                <input type="number" inputMode="decimal" step="0.1" value={form.meterHour} onChange={handleChange('meterHour')} />
+                                <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.1"
+                                    value={form.meterHour}
+                                    onChange={handleChange('meterHour')}
+                                />
                             </label>
                         </div>
                         <div className="grid three-cols">
                             <label>
                                 เลขไมล์ (KM)
-                                <input type="number" inputMode="decimal" step="0.1" value={form.odometer} onChange={handleChange('odometer')} />
+                                <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.1"
+                                    value={form.odometer}
+                                    onChange={handleChange('odometer')}
+                                />
                             </label>
                         </div>
 

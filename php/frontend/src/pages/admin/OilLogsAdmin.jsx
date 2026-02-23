@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../api.js';
 import { oilChecklistItems, oilTimeSegments, checklistOtherNoteKey, oilChecklistOtherId } from '../../data/oilLog.js';
 
-const fuelTypes = ['ทั้งหมด', 'ดีเซล B7', 'ดีเซล B10', 'ดีเซล B20', 'แก๊สโซฮอล์ 95', 'แก๊สโซฮอล์ 91', 'น้ำมันเครื่อง', 'น้ำมันไฮดรอลิค', 'อื่นๆ'];
 const limits = [50, 100, 200, 400];
 
 const numberFormat = (value) => {
@@ -23,17 +22,7 @@ const formatHourValue = (value) => {
     return Number(value).toFixed(2);
 };
 
-const thaiDateFormatter = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium' });
 const thaiDateTimeFormatter = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
-
-const formatThaiDate = (value) => {
-    if (!value) return '-';
-    try {
-        return thaiDateFormatter.format(new Date(value));
-    } catch (_) {
-        return value;
-    }
-};
 
 const formatThaiDateTime = (value) => {
     if (!value) return '-';
@@ -288,7 +277,7 @@ export default function OilLogsAdmin() {
             { label: 'วันที่', value: formatDateDMY(selected.Document_Date) },
             { label: 'รหัสเครื่อง', value: selected.Machine_Code || '-' },
             { label: 'รายละเอียดเครื่องยนต์', value: selected.Machine_Description || selected.Machine_Name || '-' },
-            { label: 'โครงการ/หน่วยงาน', value: selected.Project_Name || '-' },
+            { label: 'โครงการ/หน่วยงาน', value: selected.Project_Name || selected.MWL_Project_Name || '-' },
             { label: 'ปั้มน้ำมันในบริษัท/นอกบริษัท', value: selected.Location_Name || '-' },
             { label: 'ก่อนเติม → หลังเติม', value: `${numberFormat(selected.Tank_Before_Liters)} → ${numberFormat(selected.Tank_After_Liters)} ลิตร` },
             { label: 'บันทึกโดย', value: selected.Recorder_Name || selected.Created_By || '-' },
@@ -572,6 +561,7 @@ export default function OilLogsAdmin() {
                                     {selected.MWL_Id && (
                                         <div className="mwlog-summary">
                                             <div className="muted">เลขที่: {selected.MWL_Document_No || selected.MWL_Id}</div>
+                                            <div className="muted">โครงการ/หน่วยงาน: {selected.MWL_Project_Name || selected.Project_Name || '—'}</div>
                                             <div className="mw-meters">
                                                 <div>เลขชั่วโมง : {selected.MWL_Meter_Hour ? numberFormat(selected.MWL_Meter_Hour) : '—'}</div>
                                                 <div>เลขไมล์ : {selected.MWL_Odometer ? numberFormat(selected.MWL_Odometer) : '—'}</div>

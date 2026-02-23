@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS MachineWorkLog (
   Center_Id INT DEFAULT NULL,
   Document_No VARCHAR(50) DEFAULT NULL,
   Document_Date DATETIME NOT NULL,
+  Project_Name VARCHAR(255) DEFAULT NULL,
   Work_Order VARCHAR(100) DEFAULT NULL,
   Work_Orders_JSON TEXT DEFAULT NULL,
   Machine_Code VARCHAR(50) DEFAULT NULL,
@@ -201,6 +202,7 @@ CREATE TABLE IF NOT EXISTS MachineWorkLog (
 
 CREATE TABLE IF NOT EXISTS OilLogApproval (
   Approval_Id INT NOT NULL AUTO_INCREMENT,
+  OilLog_Id INT NULL,
   MachineWorkLog_Id INT NULL,
   Approval_Token VARCHAR(64) NOT NULL,
   Token_Expires_At DATETIME NULL,
@@ -211,7 +213,9 @@ CREATE TABLE IF NOT EXISTS OilLogApproval (
   Updated_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (Approval_Id),
   UNIQUE KEY uq_oillogapproval_token (Approval_Token),
+  UNIQUE KEY uq_oillogapproval_oillog (OilLog_Id),
   UNIQUE KEY uq_oillogapproval_mwl (MachineWorkLog_Id),
+  CONSTRAINT fk_oillogapproval_oillog FOREIGN KEY (OilLog_Id) REFERENCES OilLog (OilLog_Id) ON DELETE CASCADE,
   CONSTRAINT fk_oillogapproval_mwl FOREIGN KEY (MachineWorkLog_Id) REFERENCES MachineWorkLog (MachineWorkLog_Id) ON DELETE CASCADE,
   KEY idx_oillogapproval_oiler (Oiler_User_Id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
