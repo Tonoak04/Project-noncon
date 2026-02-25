@@ -4,9 +4,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/server.php';
 require_once __DIR__ . '/auth.php';
 
-const MWL_CHECKLIST_OTHER_ID = 'other';
-const MWL_CHECKLIST_OTHER_NOTE_KEY = 'other_note';
-
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if ($origin !== '') {
     header('Access-Control-Allow-Origin: ' . $origin);
@@ -542,41 +539,23 @@ function handle_machine_work_log_post(): void
         $timeOtTotal = $autoOtTotal;
     }
 
-    $checklistJson = null;
-    if (isset($payload['checklist']) && is_array($payload['checklist'])) {
-        $cleanChecklist = [];
-        foreach ($payload['checklist'] as $key => $value) {
-            $safeKey = preg_replace('/[^A-Za-z0-9_\-]/', '', (string)$key);
-            if ($safeKey === '') {
-                continue;
-            }
-            $status = '';
-            if ($safeKey === MWL_CHECKLIST_OTHER_ID) {
-                $status = ($value === 'เลือก') ? 'เลือก' : '';
-            } else {
-                if ($value === 'ปกติ' || $value === 'ผิดปกติ') {
-                    $status = $value;
-                }
-            }
-            if ($status !== '') {
-                $cleanChecklist[$safeKey] = $status;
-            }
-        }
-        if (
-            $checklistOtherNote !== null
-            && isset($cleanChecklist[MWL_CHECKLIST_OTHER_ID])
-            && $cleanChecklist[MWL_CHECKLIST_OTHER_ID] === 'เลือก'
-        ) {
-            $cleanChecklist[MWL_CHECKLIST_OTHER_NOTE_KEY] = $checklistOtherNote;
-        }
-        if (!empty($cleanChecklist)) {
-            $checklistJson = json_encode($cleanChecklist, JSON_UNESCAPED_UNICODE);
-        }
-    }
-
     $workOrdersJson = null;
     if (!empty($workOrders)) {
         $workOrdersJson = json_encode($workOrders, JSON_UNESCAPED_UNICODE);
+    }
+
+    $checklistJson = null;
+    $rawChecklist = isset($payload['checklist']) && is_array($payload['checklist']) ? $payload['checklist'] : [];
+    $normalizedChecklist = [];
+    foreach ($rawChecklist as $key => $value) {
+        $normalizedChecklist[$key] = mwl_normalize_string($value ?? null, 50) ?? '';
+    }
+    if (!empty($normalizedChecklist) || ($checklistOtherNote !== null && $checklistOtherNote !== '')) {
+        $checklistPayload = [
+            'items' => $normalizedChecklist,
+            'otherNote' => $checklistOtherNote,
+        ];
+        $checklistJson = json_encode($checklistPayload, JSON_UNESCAPED_UNICODE);
     }
 
     try {
@@ -727,8 +706,8 @@ function handle_machine_work_log_post(): void
         ], 201);
     } catch (Throwable $e) {
         respond_json(['error' => $e->getMessage()], 500);
-    }
-}
+    }}
+
 
 function handle_machine_work_log_request(): void
 {

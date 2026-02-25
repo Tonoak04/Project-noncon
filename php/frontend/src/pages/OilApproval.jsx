@@ -238,6 +238,9 @@ export default function OilApproval() {
             setRemark('');
             setSuccessMessage('บันทึกการยืนยันเรียบร้อย');
             window.setTimeout(() => setSuccessMessage(''), 3000);
+            if (typeof window !== 'undefined') {
+                window.alert('ยืนยันข้อมูลสำเร็จ');
+            }
             navigate('/worksite', { replace: true });
         } catch (err) {
             setError(err.message || 'ยืนยันไม่สำเร็จ');
@@ -247,7 +250,7 @@ export default function OilApproval() {
     };
 
     const approval = context?.approval;
-    const oilLog = context?.oilLog;
+    const oilLog = context?.oilLog || {};
     const tankBefore = resolveTankValue(oilLog, 'tank_before_liters');
     const tankAfter = resolveTankValue(oilLog, 'tank_after_liters');
     const oilerDone = Boolean(approval?.oiler?.approved_at);
@@ -265,12 +268,12 @@ export default function OilApproval() {
             <header style={approvalStyles.hero}>
                 <div>
                     <p className="muted">ยืนยันใบรายงานน้ำมัน</p>
-                    {oilLog ? (
-                        <h1>{oilLog.document_no || `OIL-${oilLog.id}`}</h1>
+                    {context ? (
+                        <h1>{oilLog.document_no || (oilLog.id ? `OIL-${oilLog.id}` : 'ไม่พบเลขที่เอกสาร')}</h1>
                     ) : (
                         <h1>กำลังโหลด...</h1>
                     )}
-                    {oilLog && (
+                    {context && oilLog && (
                         <p className="muted">วันที่บันทึก {formatDate(oilLog.document_date)}</p>
                     )}
                 </div>

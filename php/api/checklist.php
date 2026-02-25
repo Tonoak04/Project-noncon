@@ -119,7 +119,6 @@ function get_daily_form(PDO $pdo, int $machineId, int $year, int $month, ?string
     $queries = [];
     if ($departmentKey !== '') {
         $queries[] = [$baseSql . ' AND Unit_Work = ? LIMIT 1', array_merge($params, [$departmentKey])];
-        // Legacy fallback: rows that never stored a department
         $queries[] = [$baseSql . " AND (Unit_Work IS NULL OR Unit_Work = '') LIMIT 1", $params];
     } else {
         $queries[] = [$baseSql . " AND (Unit_Work IS NULL OR Unit_Work = '') LIMIT 1", $params];

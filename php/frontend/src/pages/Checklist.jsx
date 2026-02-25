@@ -874,10 +874,10 @@ export default function Checklist() {
                             กลับหน้าหลัก
                         </button>
                         <br></br>
-                        <span className="brand-label" style={{color: '#0b2644'}}> Daily Form </span>
-                        <p className="checklist-company brand-babel" >บริษัท ซีวิลเอนจิเนียริง จำกัด (มหาชน) และกลุ่มบริษัทในเครือ</p>
-                        <h1 className="brand-babel" fontcolor="white" >การบำรุงรักษาประจำวัน</h1>
-                        <p className="brand-babel__subtitle" style={{color:'#0b2644'}}>Daily Preventive Maintenance</p>
+                        <span className="brand-label" style={{color: '#f2f8ff'}}> Daily Form </span>
+                        <p className="checklist-company brand-babel" style={{color:'#f2f8ff'}} >บริษัท ซีวิลเอนจิเนียริง จำกัด (มหาชน) และกลุ่มบริษัทในเครือ</p>
+                        <h1 className="brand-babel" style={{color: '#f2f8ff'}}>การบำรุงรักษาประจำวัน</h1>
+                        <p className="brand-babel__subtitle" style={{color:'#f2f8ff'}}>Daily Preventive Maintenance</p>
                     </div>
                     <div className="checklist-meta-grid page-banner__meta">
                         <label className="meta-field meta-field--picker" htmlFor="machineCode">

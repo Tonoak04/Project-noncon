@@ -7,6 +7,23 @@ require_once __DIR__ . '/../server/auth.php';
 const OILER_APPROVER_ROLES = ['oiler', 'oil', 'fuel', 'fueler', 'pump', 'recorder'];
 const INSPECTOR_APPROVER_ROLES = ['inspector', 'assistant'];
 
+function normalize_token_input(string $token): string
+{
+    return trim($token);
+}
+
+function is_oillog_token_expired(?string $expiresAt): bool
+{
+    if ($expiresAt === null || $expiresAt === '') {
+        return false;
+    }
+    $ts = strtotime($expiresAt);
+    if ($ts === false) {
+        return false;
+    }
+    return $ts < time();
+}
+
 function normalize_remark($value): ?string
 {
     if ($value === null) {
@@ -38,17 +55,17 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
             log.Tank_Before_Liters,
             log.Tank_After_Liters,
             log.Operator_Name,
-            log.Assistant_Name,
-            log.Recorder_Name,
-            log.Work_Order,
             log.Supervisor_Name,
             log.Notes,
             COALESCE(apr.MachineWorkLog_Id, fallback_mwl.MachineWorkLog_Id) AS Resolved_MachineWorkLog_Id,
+            apr.MachineWorkLog_Id AS Apr_MachineWorkLog_Id,
+            fallback_mwl.MachineWorkLog_Id AS Fallback_MachineWorkLog_Id,
             apr.Approval_Token,
             apr.Token_Expires_At,
             apr.Oiler_User_Id,
             apr.Oiler_Approved_At,
             apr.Oiler_Remark,
+            mwl.Work_Order AS MWL_Work_Order,
             mwlapr.Inspector_User_Id,
             mwlapr.Inspector_Approved_At,
             mwlapr.Inspector_Remark,
@@ -59,7 +76,7 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
             inspector.Name AS Inspector_Name,
             inspector.Lastname AS Inspector_Lastname
         FROM OilLog log
-        LEFT JOIN OilLogApproval apr ON apr.OilLog_Id = log.OilLog_Id AND apr.Approval_Token = :token
+        LEFT JOIN OilLogApproval apr ON apr.OilLog_Id = log.OilLog_Id AND apr.Approval_Token IS NOT NULL AND LOWER(apr.Approval_Token) = LOWER(:token)
         LEFT JOIN MachineWorkLog fallback_mwl ON fallback_mwl.MachineWorkLog_Id = (
             SELECT mwl2.MachineWorkLog_Id FROM MachineWorkLog mwl2
             WHERE mwl2.Machine_Code = log.Machine_Code
@@ -82,6 +99,20 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
     if (!$row) {
         return null;
     }
+    $resolvedMachineWorkLogId = isset($row['Resolved_MachineWorkLog_Id']) && $row['Resolved_MachineWorkLog_Id'] !== null
+        ? (int)$row['Resolved_MachineWorkLog_Id']
+        : null;
+    $storedMachineWorkLogId = isset($row['Apr_MachineWorkLog_Id']) && $row['Apr_MachineWorkLog_Id'] !== null
+        ? (int)$row['Apr_MachineWorkLog_Id']
+        : null;
+    $fallbackMachineWorkLogId = isset($row['Fallback_MachineWorkLog_Id']) && $row['Fallback_MachineWorkLog_Id'] !== null
+        ? (int)$row['Fallback_MachineWorkLog_Id']
+        : null;
+    if ($storedMachineWorkLogId === null && $fallbackMachineWorkLogId !== null) {
+        backfill_oillogapproval_machine_work_log($pdo, (int)$row['OilLog_Id'], $fallbackMachineWorkLogId);
+        $storedMachineWorkLogId = $fallbackMachineWorkLogId;
+    }
+    $machineWorkLogId = $storedMachineWorkLogId ?? $resolvedMachineWorkLogId;
     $oilerName = trim(sprintf('%s %s', (string)($row['Oiler_Name'] ?? ''), (string)($row['Oiler_Lastname'] ?? '')));
     if ($oilerName === '') {
         $oilerName = $row['Oiler_Username'] ?? null;
@@ -90,7 +121,6 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
     if ($inspectorName === '') {
         $inspectorName = $row['Inspector_Username'] ?? null;
     }
-    $machineWorkLogId = $row['Resolved_MachineWorkLog_Id'] !== null ? (int)$row['Resolved_MachineWorkLog_Id'] : null;
     return [
         'oilLog' => [
             'id' => (int)$row['OilLog_Id'],
@@ -107,9 +137,9 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
             'fuel_before_liters' => $row['Tank_Before_Liters'],
             'fuel_after_liters' => $row['Tank_After_Liters'],
             'operator_name' => $row['Operator_Name'],
-            'assistant_name' => $row['Assistant_Name'],
-            'recorder_name' => $row['Recorder_Name'],
-            'work_order' => $row['Work_Order'],
+            'assistant_name' => null,
+            'recorder_name' => null,
+            'work_order' => $row['MWL_Work_Order'] ?? null,
             'supervisor_name' => $row['Supervisor_Name'],
             'notes' => $row['Notes'],
         ],
@@ -119,6 +149,7 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
         'approval' => [
             'token' => $row['Approval_Token'],
             'expires_at' => $row['Token_Expires_At'],
+            'token_expired' => is_oillog_token_expired($row['Token_Expires_At'] ?? null),
             'oiler' => [
                 'user_id' => $row['Oiler_User_Id'] ? (int)$row['Oiler_User_Id'] : null,
                 'approved_at' => $row['Oiler_Approved_At'],
@@ -135,6 +166,99 @@ function fetch_approval_context(PDO $pdo, int $oilLogId, string $token): ?array
     ];
 }
 
+function find_existing_token_owner(PDO $pdo, string $token): ?int
+{
+    $stmt = $pdo->prepare('SELECT OilLog_Id FROM OilLogApproval WHERE LOWER(Approval_Token) = LOWER(:token) LIMIT 1');
+    $stmt->execute([':token' => $token]);
+    $row = $stmt->fetch();
+    return $row ? (int)$row['OilLog_Id'] : null;
+}
+
+function resolve_machine_work_log_id_for_oillog(PDO $pdo, int $oilLogId): ?int
+{
+    $stmt = $pdo->prepare('SELECT Machine_Code, Document_Date FROM OilLog WHERE OilLog_Id = :id LIMIT 1');
+    $stmt->execute([':id' => $oilLogId]);
+    $logRow = $stmt->fetch();
+    if (!$logRow) {
+        return null;
+    }
+    $machineCode = trim((string)($logRow['Machine_Code'] ?? ''));
+    $documentDate = $logRow['Document_Date'] ?? null;
+    if ($machineCode === '' || $documentDate === null) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT MachineWorkLog_Id FROM MachineWorkLog WHERE Machine_Code = :machineCode AND DATE(Document_Date) = DATE(:documentDate) ORDER BY MachineWorkLog_Id DESC LIMIT 1');
+    $stmt->execute([
+        ':machineCode' => $machineCode,
+        ':documentDate' => $documentDate,
+    ]);
+    $row = $stmt->fetch();
+    return $row ? (int)$row['MachineWorkLog_Id'] : null;
+}
+
+function backfill_oillogapproval_machine_work_log(PDO $pdo, int $oilLogId, int $machineWorkLogId): void
+{
+    if ($machineWorkLogId <= 0) {
+        return;
+    }
+    $existingStmt = $pdo->prepare('SELECT MachineWorkLog_Id FROM OilLogApproval WHERE OilLog_Id = :oilLogId LIMIT 1');
+    $existingStmt->execute([':oilLogId' => $oilLogId]);
+    $existing = $existingStmt->fetch();
+    if ($existing && $existing['MachineWorkLog_Id'] !== null) {
+        return;
+    }
+    $conflictStmt = $pdo->prepare('SELECT OilLog_Id FROM OilLogApproval WHERE MachineWorkLog_Id = :machineWorkLogId LIMIT 1');
+    $conflictStmt->execute([':machineWorkLogId' => $machineWorkLogId]);
+    $conflict = $conflictStmt->fetch();
+    if ($conflict && (int)$conflict['OilLog_Id'] !== $oilLogId) {
+        return;
+    }
+    $update = $pdo->prepare('UPDATE OilLogApproval SET MachineWorkLog_Id = :machineWorkLogId, Updated_At = CURRENT_TIMESTAMP WHERE OilLog_Id = :oilLogId AND (MachineWorkLog_Id IS NULL OR MachineWorkLog_Id = 0)');
+    $update->execute([
+        ':machineWorkLogId' => $machineWorkLogId,
+        ':oilLogId' => $oilLogId,
+    ]);
+}
+
+function sync_missing_oillog_token(PDO $pdo, int $oilLogId, string $token): ?array
+{
+    $existingRowStmt = $pdo->prepare('SELECT Approval_Token FROM OilLogApproval WHERE OilLog_Id = :id LIMIT 1');
+    $existingRowStmt->execute([':id' => $oilLogId]);
+    $existingRow = $existingRowStmt->fetch();
+    if ($existingRow) {
+        $storedToken = trim((string)$existingRow['Approval_Token']);
+        if ($storedToken !== '') {
+            return null;
+        }
+    }
+    $tokenOwner = find_existing_token_owner($pdo, $token);
+    if ($tokenOwner !== null && $tokenOwner !== $oilLogId) {
+        return null;
+    }
+    $logExistsStmt = $pdo->prepare('SELECT OilLog_Id FROM OilLog WHERE OilLog_Id = :id LIMIT 1');
+    $logExistsStmt->execute([':id' => $oilLogId]);
+    if (!$logExistsStmt->fetch()) {
+        return null;
+    }
+    $machineWorkLogId = resolve_machine_work_log_id_for_oillog($pdo, $oilLogId);
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+7 days'));
+    $stmt = $pdo->prepare(
+        'INSERT INTO OilLogApproval (OilLog_Id, MachineWorkLog_Id, Approval_Token, Token_Expires_At)
+        VALUES (:oilLogId, :machineWorkLogId, :token, :expiresAt)
+        ON DUPLICATE KEY UPDATE
+            Approval_Token = COALESCE(Approval_Token, VALUES(Approval_Token)),
+            Token_Expires_At = VALUES(Token_Expires_At),
+            MachineWorkLog_Id = COALESCE(VALUES(MachineWorkLog_Id), MachineWorkLog_Id)'
+    );
+    $stmt->execute([
+        ':oilLogId' => $oilLogId,
+        ':machineWorkLogId' => $machineWorkLogId,
+        ':token' => $token,
+        ':expiresAt' => $expiresAt,
+    ]);
+    return fetch_approval_context($pdo, $oilLogId, $token);
+}
+
 function user_has_any_role(array $user, array $expectedRoles): bool
 {
     foreach ($expectedRoles as $role) {
@@ -147,9 +271,8 @@ function user_has_any_role(array $user, array $expectedRoles): bool
 
 function handle_get_request(): void
 {
-    require_auth();
     $oilLogId = isset($_GET['oilLogId']) ? (int)$_GET['oilLogId'] : 0;
-    $token = trim((string)($_GET['token'] ?? ''));
+    $token = normalize_token_input((string)($_GET['token'] ?? ''));
     if ($oilLogId <= 0 || $token === '') {
         respond_json(['error' => 'ต้องระบุ oilLogId และ token'], 422);
         return;
@@ -157,7 +280,15 @@ function handle_get_request(): void
     $pdo = db_connection();
     $context = fetch_approval_context($pdo, $oilLogId, $token);
     if (!$context) {
-        respond_json(['error' => 'ไม่พบใบงานหรือโทเคนไม่ถูกต้อง'], 404);
+        $tokenOwner = find_existing_token_owner($pdo, $token);
+        if ($tokenOwner && $tokenOwner !== $oilLogId) {
+            $context = fetch_approval_context($pdo, $tokenOwner, $token);
+        } elseif (!$tokenOwner) {
+            $context = sync_missing_oillog_token($pdo, $oilLogId, $token);
+        }
+    }
+    if (!$context) {
+        respond_json(['error' => 'ไม่พบใบงานหรือโทเคนไม่ถูกต้อง หรือโทเคนหมดอายุ'], 404);
         return;
     }
     respond_json($context);
@@ -180,7 +311,7 @@ function handle_post_request(): void
         return;
     }
     $oilLogId = isset($payload['oilLogId']) ? (int)$payload['oilLogId'] : 0;
-    $token = trim((string)($payload['token'] ?? ''));
+    $token = normalize_token_input((string)($payload['token'] ?? ''));
     $approvalType = strtolower(trim((string)($payload['approvalType'] ?? '')));
     if ($oilLogId <= 0 || $token === '' || !in_array($approvalType, ['oiler', 'inspector'], true)) {
         respond_json(['error' => 'ข้อมูลไม่ครบถ้วน'], 422);
@@ -195,7 +326,18 @@ function handle_post_request(): void
     $pdo = db_connection();
     $context = fetch_approval_context($pdo, $oilLogId, $token);
     if (!$context) {
-        respond_json(['error' => 'ไม่พบใบงานหรือโทเคนหมดอายุ'], 404);
+        $tokenOwner = find_existing_token_owner($pdo, $token);
+        if ($tokenOwner && $tokenOwner !== $oilLogId) {
+            $oilLogId = $tokenOwner;
+            $context = fetch_approval_context($pdo, $oilLogId, $token);
+        }
+        if (!$context) {
+            respond_json(['error' => 'ไม่พบใบงานหรือโทเคนหมดอายุ'], 404);
+            return;
+        }
+    }
+    if (!empty($context['approval']['token_expired'])) {
+        respond_json(['error' => 'โทเคนนี้หมดอายุแล้ว กรุณาขอสแกนใหม่'], 410);
         return;
     }
     $machineWorkLogId = $context['machineWorkLog']['id'] ?? null;
@@ -205,7 +347,7 @@ function handle_post_request(): void
             respond_json(['error' => 'พนักงานออยเลอร์ยืนยันแล้ว'], 409);
             return;
         }
-        $stmt = $pdo->prepare('UPDATE OilLogApproval SET Oiler_User_Id = :userId, Oiler_Approved_At = :ts, Oiler_Remark = :remark, MachineWorkLog_Id = COALESCE(MachineWorkLog_Id, :machineWorkLogId), Updated_At = CURRENT_TIMESTAMP WHERE OilLog_Id = :oilLogId AND Approval_Token = :token');
+        $stmt = $pdo->prepare('UPDATE OilLogApproval SET Oiler_User_Id = :userId, Oiler_Approved_At = :ts, Oiler_Remark = :remark, MachineWorkLog_Id = COALESCE(MachineWorkLog_Id, :machineWorkLogId), Updated_At = CURRENT_TIMESTAMP WHERE OilLog_Id = :oilLogId AND LOWER(Approval_Token) = LOWER(:token)');
         $stmt->execute([
             ':userId' => $user['Center_Id'] ?? null,
             ':ts' => $now,

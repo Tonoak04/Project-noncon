@@ -291,11 +291,11 @@ export default function ChecklistAdmin() {
         const vehicleLabel = vehicleType || '-';
         const periodLabel = formatPeriodLabel(metaForm.period);
 
-        rows.push([COMPANY_TITLE, '', '', '', '', '', '', '', FORM_TITLE]);
-        rows.push(['หมายเลขเครื่องจักร / รหัส', machineCode, '', '', 'ยี่ห้อ/รุ่น', vehicleLabel]);
-        rows.push(['หน่วยงานที่รับผิดชอบ', departmentLabel, '', '', 'ประจำเดือน', periodLabel]);
-        rows.push(['วันที่บันทึก', dateLabel, '', '', 'สถานที่ปฏิบัติงาน', departmentLabel]);
-        rows.push([]);
+        rows.push([ '', COMPANY_TITLE, '', '', '', '', '', '', FORM_TITLE]);
+        rows.push(['รหัสเครื่องจักร', machineCode, vehicleLabel, '', '', '']);
+        rows.push(['หน่วยงานที่รับผิดชอบ', departmentLabel, 'ประจำเดือน', periodLabel, '', '']);
+        rows.push(['วันที่บันทึก', dateLabel, '', '']);
+        rows.push(['','','','','','','','','','','','','','','','','','','วันที่ตรวจเช็ก']);
 
         const tableHeader = ['ลำดับ', 'รายการตรวจสอบ', 'มาตรฐาน/เกณฑ์', 'ความถี่', ...DAY_COLUMNS.map((day) => `${day}`)];
         const tableHeaderRowIndex = rows.length + 1;
@@ -309,24 +309,23 @@ export default function ChecklistAdmin() {
             rows.push([item.order, item.topic, item.method, item.frequency, ...dayValues]);
         });
 
-        rows.push([]);
         rows.push([
+            '',
+            '',
+            '',
             'ผู้ตรวจสอบ/พขร.',
-            '',
-            '',
-            '',
             ...DAY_COLUMNS.map((day) => formatSignatureForExport(driverSignatures[String(day)])),
         ]);
         rows.push([
+            '',
+            '',
+            '',
             'โฟร์แมนผู้ตรวจสอบ',
-            '',
-            '',
-            '',
             ...DAY_COLUMNS.map((day) => formatSignatureForExport(foremanSignatures[String(day)])),
         ]);
 
         rows.push([]);
-        rows.push(['ปัญหาที่ตรวจพบ (ถ้ามี)', issueNotes || '-']);
+        rows.push(['ปัญหาที่ตรวจพบ', issueNotes || '-']);
         rows.push(['คำอธิบายสัญลักษณ์', '✓ = ปกติ, ✗ = ผิดปกติ, S = Stand by, B = จอดซ่อม']);
 
         return { rows, freezeRow: tableHeaderRowIndex };
@@ -347,10 +346,10 @@ export default function ChecklistAdmin() {
             const { rows, freezeRow } = buildChecklistExportRows();
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!cols'] = [
-                { wch: 6 },
-                { wch: 38 },
-                { wch: 28 },
-                { wch: 12 },
+                { wch: 16 },
+                { wch: 44 },
+                { wch: 24 },
+                { wch: 16 },
                 ...DAY_COLUMNS.map(() => ({ wch: 4 })),
             ];
             worksheet['!freeze'] = { xSplit: 5, ySplit: freezeRow };

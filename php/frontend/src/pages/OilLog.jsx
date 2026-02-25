@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../api.js';
@@ -128,6 +128,41 @@ const approvalModalStyles = {
         marginTop: '8px',
         fontSize: '13px',
         color: '#198754',
+    },
+};
+
+const liveApprovalStatusStyles = {
+    card: {
+        marginTop: '12px',
+        padding: '16px',
+        borderRadius: '14px',
+        border: '1px solid #badfcc',
+        background: '#f0f9f3',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '12px',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+    },
+    info: {
+        flex: '1 1 220px',
+    },
+    title: {
+        margin: 0,
+        fontWeight: 600,
+    },
+    actions: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+    },
+    actionButton: {
+        borderRadius: '10px',
+        border: '1px solid #d0d7de',
+        background: '#fff',
+        padding: '8px 14px',
+        cursor: 'pointer',
+        fontWeight: 600,
     },
 };
 
@@ -352,9 +387,11 @@ export default function OilLog() {
     const [approvalCopyFeedback, setApprovalCopyFeedback] = useState('');
     const [approvalQrDataUrl, setApprovalQrDataUrl] = useState('');
     const [approvalStatus, setApprovalStatus] = useState(null);
+    const [approvalMonitor, setApprovalMonitor] = useState({ oilLogId: null, token: '' });
     const machinePickerRef = useRef(null);
     const photoInputRef = useRef(null);
     const approvalWatcherRef = useRef(null);
+    const approvalCompletionHandledRef = useRef(false);
 
     const buildApprovalUrl = (path = '') => {
         if (!path) {
@@ -376,19 +413,30 @@ export default function OilLog() {
         }
     };
 
-    const closeApprovalPreview = () => {
+    const stopTrackingInterval = () => {
         stopApprovalWatcher();
-        setApprovalPreview((prev) => ({ ...prev, visible: false }));
+        setApprovalMonitor({ oilLogId: null, token: '' });
+    };
+
+    const cancelApprovalTracking = () => {
+        stopTrackingInterval();
+        setApprovalStatus(null);
+    };
+
+    const closeApprovalPreview = (options = {}) => {
+        const { stopTracking = false } = options;
+        if (stopTracking) {
+            cancelApprovalTracking();
+        }
+        setApprovalPreview({ visible: false, url: '', token: '', expiresAt: '', oilLogId: null });
         setApprovalCopyFeedback('');
         setApprovalQrDataUrl('');
-        setApprovalStatus(null);
-        navigate('/worksite', { replace: true });
     };
 
     const confirmCloseApprovalPreview = () => {
         const shouldClose = typeof window === 'undefined'
             ? true
-            : window.confirm('ยืนยันที่จะปิดหน้าต่างนี้หรือไม่? หากปิดจะกลับไปหน้าหลักและไม่สามารถเปิดหน้านี้ได้อีก');
+            : window.confirm('ยืนยันที่จะปิดหน้าต่างนี้หรือไม่? ระบบยังคงติดตามสถานะให้โดยอัตโนมัติ และสามารถหยุดการติดตามได้จากแถบแจ้งเตือนด้านล่าง');
         if (shouldClose) {
             closeApprovalPreview();
         }
@@ -458,27 +506,52 @@ export default function OilLog() {
         };
     }, [approvalPreview.url]);
 
+    const refreshLogs = useCallback(async () => {
+        try {
+            setLoadingLogs(true);
+            const data = await apiGet('/api/oillogs.php?limit=5');
+            setLogs(data.items || []);
+            setSummary(data.summary || { count: 0, total_liters: 0 });
+        } catch (err) {
+            setError(err.message || 'ไม่สามารถโหลดประวัติได้');
+        } finally {
+            setLoadingLogs(false);
+        }
+    }, []);
+
     useEffect(() => {
-        if (!approvalPreview.visible || !approvalPreview.token || !approvalPreview.oilLogId) {
+        refreshLogs();
+    }, [refreshLogs]);
+
+    useEffect(() => {
+        const { oilLogId, token } = approvalMonitor;
+        if (!oilLogId || !token) {
             stopApprovalWatcher();
-            setApprovalStatus(null);
             return;
         }
         let cancelled = false;
         const fetchStatus = async () => {
             try {
-                const data = await apiGet(`/api/oillog_approvals.php?oilLogId=${approvalPreview.oilLogId}&token=${approvalPreview.token}`);
+                const data = await apiGet(`/api/oillog_approvals.php?oilLogId=${oilLogId}&token=${encodeURIComponent(token)}`);
                 if (cancelled) {
                     return;
                 }
                 setApprovalStatus({
+                    oilLogId,
+                    documentNo: data?.oilLog?.document_no || data?.oilLog?.Document_No || (oilLogId ? `OIL-${oilLogId}` : ''),
                     oilerDone: Boolean(data?.approval?.oiler?.approved_at),
                     oilerName: data?.approval?.oiler?.full_name || '',
                     fetchedAt: Date.now(),
+                    error: '',
                 });
             } catch (err) {
                 if (!cancelled) {
-                    setApprovalStatus((prev) => prev ? { ...prev, error: err.message || 'โหลดสถานะไม่สำเร็จ' } : { error: err.message || 'โหลดสถานะไม่สำเร็จ' });
+                    setApprovalStatus((prev) => ({
+                        ...(prev || {}),
+                        oilLogId,
+                        documentNo: prev?.documentNo || (oilLogId ? `OIL-${oilLogId}` : ''),
+                        error: err.message || 'โหลดสถานะไม่สำเร็จ',
+                    }));
                 }
             }
         };
@@ -489,14 +562,30 @@ export default function OilLog() {
             cancelled = true;
             stopApprovalWatcher();
         };
-    }, [approvalPreview.visible, approvalPreview.token, approvalPreview.oilLogId]);
+    }, [approvalMonitor.oilLogId, approvalMonitor.token]);
 
     useEffect(() => {
-        if (approvalStatus?.oilerDone) {
-            stopApprovalWatcher();
-            setSuccessMessage('บันทึกข้อมูลเรียบร้อย (พนักงานออยเลอร์ยืนยันแล้ว)');
+        if (!approvalStatus?.oilerDone) {
+            approvalCompletionHandledRef.current = false;
+            return undefined;
         }
-    }, [approvalStatus]);
+        if (approvalCompletionHandledRef.current) {
+            return undefined;
+        }
+        approvalCompletionHandledRef.current = true;
+        setSuccessMessage('บันทึกข้อมูลเรียบร้อย (พนักงานออยเลอร์ยืนยันแล้ว)');
+        refreshLogs();
+        stopTrackingInterval();
+        setApprovalPreview((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        const timer = window.setTimeout(() => setSuccessMessage(''), 4000);
+        const shouldReturnHome = typeof window !== 'undefined'
+            ? window.confirm('พนักงานออยเลอร์ยืนยันแล้ว ต้องการกลับไปหน้าหลักตอนนี้เลยหรือไม่?')
+            : false;
+        if (shouldReturnHome) {
+            navigate('/worksite', { replace: true });
+        }
+        return () => window.clearTimeout(timer);
+    }, [approvalStatus?.oilerDone, refreshLogs, navigate]);
 
     useEffect(() => {
         (async () => {
@@ -536,23 +625,6 @@ export default function OilLog() {
             return { ...prev, ...defaults };
         });
     }, [user, canAutoFillOperator]);
-
-    const refreshLogs = async () => {
-        try {
-            setLoadingLogs(true);
-            const data = await apiGet('/api/oillogs.php?limit=5');
-            setLogs(data.items || []);
-            setSummary(data.summary || { count: 0, total_liters: 0 });
-        } catch (err) {
-            setError(err.message || 'ไม่สามารถโหลดประวัติได้');
-        } finally {
-            setLoadingLogs(false);
-        }
-    };
-
-    useEffect(() => {
-        refreshLogs();
-    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -965,15 +1037,28 @@ export default function OilLog() {
                 : `บันทึกข้อมูลเรียบร้อย (${approvalNotice})`;
             setSuccessMessage(successText);
             const createdOilLogId = result?.item?.OilLog_Id ?? result?.item?.oilLog_id ?? null;
-            if (approvalPayload) {
+            stopTrackingInterval();
+            setApprovalStatus(null);
+            const documentNo = result?.item?.Document_No ?? result?.item?.document_no ?? '';
+            if (approvalPayload && createdOilLogId) {
                 const absoluteUrl = buildApprovalUrl(approvalPayload.path || approvalPayload.url || '');
-                if (absoluteUrl) {
+                const approvalToken = approvalPayload.token || '';
+                if (absoluteUrl && approvalToken) {
                     setApprovalPreview({
                         visible: true,
                         url: absoluteUrl,
-                        token: approvalPayload.token || '',
+                        token: approvalToken,
                         expiresAt: approvalPayload.expires_at || approvalPayload.expiresAt || '',
                         oilLogId: createdOilLogId,
+                    });
+                    setApprovalMonitor({ oilLogId: createdOilLogId, token: approvalToken });
+                    setApprovalStatus({
+                        oilLogId: createdOilLogId,
+                        documentNo: documentNo || `OIL-${createdOilLogId}`,
+                        oilerDone: false,
+                        oilerName: '',
+                        fetchedAt: Date.now(),
+                        error: '',
                     });
                 }
             }
@@ -1031,10 +1116,6 @@ export default function OilLog() {
                                     onChange={handleChange('documentDate')}
                                     required
                                 />
-                            </label>
-                            <label>
-                                เลขที่เอกสาร (ถ้ามี)
-                                <input type="text" value={form.documentNo} onChange={handleChange('documentNo')} placeholder="เช่น OIL-001" />
                             </label>
                         </div>
                         <div className="grid three-cols">
@@ -1352,7 +1433,6 @@ export default function OilLog() {
                         <header>
                             <h3 style={{color:'red'}}>ทุกอย่างต้องเป็นไปตามที่กรอกไว้ข้างต้นหากมีการดัดแปลงข้อมูลหรือข้อมูลไม่ถูกต้องอาจส่งผลต่อการพิจารณา จุ๊บๆ💓</h3>
                         </header>
-
                         {error && <div className="error-row">{error}</div>}
                         {successMessage && <div className="success-row">{successMessage}</div>}
                         <button style={{fontSize: '16px'}} type="submit" className="button primary full-width" disabled={saving}>
@@ -1424,7 +1504,7 @@ export default function OilLog() {
                         >
                             บันทึกรูป QR Code
                         </button>
-                        <p>หากกดปิดหน้าต่างแล้วจะไม่สามารถเข้าหน้าต่างนี้ได้อีก</p>
+                        <p>ปิดหน้าต่างนี้ได้ ระบบยังติดตามสถานะในพื้นหลัง และสามารถหยุดติดตามได้จากแถบแจ้งเตือนบนฟอร์ม</p>
                         <button
                             type="button"
                             style={approvalModalStyles.primaryButton}

@@ -371,11 +371,6 @@ function persist_oillog_photos(array $files, int $oilLogId): array
 
 function transform_oillog_row(array $row): array
 {
-    if (array_key_exists('Checklist_JSON', $row)) {
-        $decoded = json_decode((string)$row['Checklist_JSON'], true);
-        $row['Checklist'] = is_array($decoded) ? $decoded : [];
-        unset($row['Checklist_JSON']);
-    }
     if (array_key_exists('Fuel_Details_JSON', $row)) {
         $decoded = json_decode((string)$row['Fuel_Details_JSON'], true);
         $row['Fuel_Details'] = is_array($decoded) ? $decoded : [];
@@ -452,7 +447,30 @@ function transform_oillog_row(array $row): array
 function fetch_oillog(PDO $pdo, int $id): ?array
 {
     $stmt = $pdo->prepare(
-        'SELECT log.*,
+        'SELECT
+            log.OilLog_Id,
+            log.Center_Id,
+            log.Document_No,
+            log.Document_Date,
+            log.Project_Name,
+            log.Location_Name,
+            log.Machine_Code,
+            log.Machine_Name,
+            log.Machine_Description,
+            log.Operation_Details,
+            log.Fuel_Type,
+            log.Fuel_Amount_Liters,
+            log.Fuel_Details_JSON,
+            log.Photo_Attachments_JSON,
+            log.Fuel_Ticket_No,
+            log.Tank_Before_Liters,
+            log.Tank_After_Liters,
+            log.Fuel_Time,
+            log.Operator_Name,
+            log.Notes,
+            log.Created_By,
+            log.Created_At,
+            log.Updated_At,
             apr.Oiler_User_Id AS Approval_Oiler_User_Id,
             apr.Oiler_Approved_At AS Approval_Oiler_Approved_At,
             apr.Oiler_Remark AS Approval_Oiler_Remark,
@@ -485,7 +503,6 @@ function fetch_oillog(PDO $pdo, int $id): ?array
             mwl.Time_Ot_End AS MWL_Time_Ot_End,
             mwl.Time_Ot_Total AS MWL_Time_Ot_Total,
             mwl.Operation_Details AS MWL_Operation_Details,
-            mwl.Checklist_JSON AS MWL_Checklist_JSON,
             mwlapr.Inspector_User_Id AS MWL_Inspector_User_Id,
             mwlapr.Inspector_Approved_At AS MWL_Inspector_Approved_At,
             mwlapr.Inspector_Remark AS MWL_Inspector_Remark,
@@ -521,10 +538,8 @@ function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
         log.OilLog_Id,
         log.Document_No,
         log.Document_Date,
-        log.Work_Order,
         log.Project_Name,
         log.Location_Name,
-        log.Requester_Name,
         log.Machine_Code,
         log.Machine_Name,
         log.Machine_Description,
@@ -536,28 +551,9 @@ function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
         log.Fuel_Ticket_No,
         log.Tank_Before_Liters,
         log.Tank_After_Liters,
-        log.Meter_Hour_Start,
-        log.Meter_Hour_End,
-        log.Odometer_Start,
-        log.Odometer_End,
-        log.Work_Meter_Start,
-        log.Work_Meter_End,
-        log.Work_Meter_Total,
-        log.Time_Morning_Start,
-        log.Time_Morning_End,
-        log.Time_Morning_Total,
-        log.Time_Afternoon_Start,
-        log.Time_Afternoon_End,
-        log.Time_Afternoon_Total,
-        log.Time_Ot_Start,
-        log.Time_Ot_End,
-        log.Time_Ot_Total,
         log.Fuel_Time,
         log.Operator_Name,
-        log.Assistant_Name,
-        log.Recorder_Name,
         log.Notes,
-        log.Checklist_JSON,
         log.Created_By,
         log.Created_At,
         apr.Oiler_User_Id AS Approval_Oiler_User_Id,
@@ -591,7 +587,6 @@ function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
         mwl.Time_Ot_End AS MWL_Time_Ot_End,
         mwl.Time_Ot_Total AS MWL_Time_Ot_Total,
         mwl.Operation_Details AS MWL_Operation_Details,
-        mwl.Checklist_JSON AS MWL_Checklist_JSON,
         mwlapr.Inspector_User_Id AS MWL_Inspector_User_Id,
         mwlapr.Inspector_Approved_At AS MWL_Inspector_Approved_At,
         mwlapr.Inspector_Remark AS MWL_Inspector_Remark,
@@ -646,10 +641,7 @@ function fetch_oillogs(PDO $pdo, array $filters, ?int $limit = 50): array
             log.Machine_Code LIKE :search
             OR log.Machine_Name LIKE :search
             OR log.Project_Name LIKE :search
-            OR log.Work_Order LIKE :search
             OR log.Operator_Name LIKE :search
-            OR log.Requester_Name LIKE :search
-            OR log.Assistant_Name LIKE :search
         )';
         $params[':search'] = '%' . $filters['search'] . '%';
     }
@@ -753,11 +745,8 @@ function handle_oillog_post(): void
     }
 
     $documentDate = normalize_datetime($payload['documentDate'] ?? date('Y-m-d H:i:s'));
-    $workOrder = normalize_string($payload['workOrder'] ?? null, 100);
     $projectName = normalize_string($payload['projectName'] ?? null, 255);
     $locationName = normalize_string($payload['locationName'] ?? null, 255);
-    $requesterName = normalize_string($payload['requesterName'] ?? null, 120);
-    $supervisorName = normalize_string($payload['supervisorName'] ?? null, 120);
     $machineCode = normalize_string($payload['machineCode'] ?? null, 50);
     $machineName = normalize_string($payload['machineName'] ?? null, 120);
     $machineDescription = normalize_string($payload['machineDescription'] ?? null, 255);
@@ -768,34 +757,15 @@ function handle_oillog_post(): void
     $fuelTicket = normalize_string($payload['fuelTicketNo'] ?? null, 80);
     $tankBefore = normalize_decimal($payload['tankBeforeLiters'] ?? null);
     $tankAfter = normalize_decimal($payload['tankAfterLiters'] ?? null);
-    $meterStart = normalize_decimal($payload['meterHourStart'] ?? null);
-    $meterEnd = normalize_decimal($payload['meterHourEnd'] ?? null);
-    $kmStart = normalize_decimal($payload['odometerStart'] ?? null);
-    $kmEnd = normalize_decimal($payload['odometerEnd'] ?? null);
-    $workMeterStart = normalize_decimal($payload['workMeterStart'] ?? null);
-    $workMeterEnd = normalize_decimal($payload['workMeterEnd'] ?? null);
-    $workMeterTotal = normalize_decimal($payload['workMeterTotal'] ?? null);
-    $timeMorningStart = normalize_time($payload['timeMorningStart'] ?? null);
-    $timeMorningEnd = normalize_time($payload['timeMorningEnd'] ?? null);
-    $timeMorningTotal = normalize_decimal($payload['timeMorningTotal'] ?? null);
-    $timeAfternoonStart = normalize_time($payload['timeAfternoonStart'] ?? null);
-    $timeAfternoonEnd = normalize_time($payload['timeAfternoonEnd'] ?? null);
-    $timeAfternoonTotal = normalize_decimal($payload['timeAfternoonTotal'] ?? null);
-    $timeOtStart = normalize_time($payload['timeOtStart'] ?? null);
-    $timeOtEnd = normalize_time($payload['timeOtEnd'] ?? null);
-    $timeOtTotal = normalize_decimal($payload['timeOtTotal'] ?? null);
     $fuelTime = normalize_time($payload['fuelTime'] ?? null);
     $operatorAccountId = isset($payload['operatorAccountId']) ? (int)$payload['operatorAccountId'] : null;
     if ($operatorAccountId !== null && $operatorAccountId <= 0) {
         $operatorAccountId = null;
     }
     $operatorName = normalize_string($payload['operatorName'] ?? null, 120);
-    $assistantName = normalize_string($payload['assistantName'] ?? null, 120);
-    $recorderName = normalize_string($payload['recorderName'] ?? null, 120);
     $notes = normalize_text($payload['notes'] ?? null, 2000);
     $checklistOtherNote = normalize_text($payload['checklistOtherNote'] ?? null, 500);
     $documentNo = normalize_string($payload['documentNo'] ?? null, 50);
-    $checklistJson = null;
     $fuelDetailsJson = null;
     if (isset($payload['fuelDetails']) && is_array($payload['fuelDetails'])) {
         $cleanFuelDetails = [];
@@ -819,7 +789,7 @@ function handle_oillog_post(): void
         }
     }
 
-    $allowedFuelTypes = ['ดีเซล B7', 'ดีเซล B10', 'ดีเซล B20', 'แก๊สโซฮอล์ 91', 'แก๊สโซฮอล์ 95', 'น้ำมันเครื่อง', 'น้ำมันไฮดรอลิค', 'อื่นๆ'];
+    $allowedFuelTypes = ['32', '46', '68', '100', '150', '220', '320', '460', '680', '35', '50', 'น้ำมันเครื่อง', 'น้ำมันไฮดรอลิค', 'อื่นๆ'];
     $fuelType = normalize_string($fuelType, 50) ?? '';
     if ($fuelType === 'อื่นๆ') {
         if ($customFuel !== null) {
@@ -869,22 +839,6 @@ function handle_oillog_post(): void
             respond_json(['error' => 'กรุณาเลือกพนักงานขับรถ'], 422);
             return;
         }
-    }
-
-    if ($workMeterTotal === null && $workMeterStart !== null && $workMeterEnd !== null) {
-        $workMeterTotal = round($workMeterEnd - $workMeterStart, 2);
-    }
-    $autoMorningTotal = diff_time_hours($timeMorningStart, $timeMorningEnd);
-    if ($timeMorningTotal === null && $autoMorningTotal !== null) {
-        $timeMorningTotal = $autoMorningTotal;
-    }
-    $autoAfternoonTotal = diff_time_hours($timeAfternoonStart, $timeAfternoonEnd);
-    if ($timeAfternoonTotal === null && $autoAfternoonTotal !== null) {
-        $timeAfternoonTotal = $autoAfternoonTotal;
-    }
-    $autoOtTotal = diff_time_hours($timeOtStart, $timeOtEnd);
-    if ($timeOtTotal === null && $autoOtTotal !== null) {
-        $timeOtTotal = $autoOtTotal;
     }
 
     if (isset($payload['checklist']) && is_array($payload['checklist'])) {
@@ -950,16 +904,23 @@ function handle_oillog_post(): void
             return;
         }
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('INSERT INTO OilLog (Center_Id, Document_No, Document_Date, Work_Order, Project_Name, Location_Name, Requester_Name, Supervisor_Name, Machine_Code, Machine_Name, Machine_Description, Operation_Details, Fuel_Type, Fuel_Amount_Liters, Fuel_Details_JSON, Fuel_Ticket_No, Tank_Before_Liters, Tank_After_Liters, Meter_Hour_Start, Meter_Hour_End, Odometer_Start, Odometer_End, Work_Meter_Start, Work_Meter_End, Work_Meter_Total, Time_Morning_Start, Time_Morning_End, Time_Morning_Total, Time_Afternoon_Start, Time_Afternoon_End, Time_Afternoon_Total, Time_Ot_Start, Time_Ot_End, Time_Ot_Total, Fuel_Time, Operator_Name, Assistant_Name, Recorder_Name, Notes, Checklist_JSON, Created_By) VALUES (:center_id, :document_no, :document_date, :work_order, :project_name, :location_name, :requester_name, :supervisor_name, :machine_code, :machine_name, :machine_description, :operation_details, :fuel_type, :fuel_amount, :fuel_details, :fuel_ticket, :tank_before, :tank_after, :meter_start, :meter_end, :km_start, :km_end, :work_meter_start, :work_meter_end, :work_meter_total, :time_morning_start, :time_morning_end, :time_morning_total, :time_afternoon_start, :time_afternoon_end, :time_afternoon_total, :time_ot_start, :time_ot_end, :time_ot_total, :fuel_time, :operator_name, :assistant_name, :recorder_name, :notes, :checklist_json, :created_by)');
+        $stmt = $pdo->prepare('INSERT INTO OilLog (
+            Center_Id, Document_No, Document_Date, Project_Name, Location_Name,
+            Machine_Code, Machine_Name, Machine_Description, Operation_Details,
+            Fuel_Type, Fuel_Amount_Liters, Fuel_Details_JSON, Fuel_Ticket_No, Tank_Before_Liters, Tank_After_Liters,
+            Fuel_Time, Operator_Name, Notes, Created_By
+        ) VALUES (
+            :center_id, :document_no, :document_date, :project_name, :location_name,
+            :machine_code, :machine_name, :machine_description, :operation_details,
+            :fuel_type, :fuel_amount, :fuel_details, :fuel_ticket, :tank_before, :tank_after,
+            :fuel_time, :operator_name, :notes, :created_by
+        )');
         $stmt->execute([
             ':center_id' => $user['Center_Id'] ?? null,
             ':document_no' => $documentNo,
             ':document_date' => $documentDate,
-            ':work_order' => $workOrder,
             ':project_name' => $projectName,
             ':location_name' => $locationName,
-            ':requester_name' => $requesterName,
-            ':supervisor_name' => $supervisorName,
             ':machine_code' => $machineCode,
             ':machine_name' => $machineName,
             ':machine_description' => $machineDescription,
@@ -970,28 +931,9 @@ function handle_oillog_post(): void
             ':fuel_ticket' => $fuelTicket,
             ':tank_before' => $tankBefore,
             ':tank_after' => $tankAfter,
-            ':meter_start' => $meterStart,
-            ':meter_end' => $meterEnd,
-            ':km_start' => $kmStart,
-            ':km_end' => $kmEnd,
-            ':work_meter_start' => $workMeterStart,
-            ':work_meter_end' => $workMeterEnd,
-            ':work_meter_total' => $workMeterTotal,
-            ':time_morning_start' => $timeMorningStart,
-            ':time_morning_end' => $timeMorningEnd,
-            ':time_morning_total' => $timeMorningTotal,
-            ':time_afternoon_start' => $timeAfternoonStart,
-            ':time_afternoon_end' => $timeAfternoonEnd,
-            ':time_afternoon_total' => $timeAfternoonTotal,
-            ':time_ot_start' => $timeOtStart,
-            ':time_ot_end' => $timeOtEnd,
-            ':time_ot_total' => $timeOtTotal,
             ':fuel_time' => $fuelTime,
             ':operator_name' => $operatorName,
-            ':assistant_name' => $assistantName,
-            ':recorder_name' => $recorderName,
             ':notes' => $notes,
-            ':checklist_json' => $checklistJson,
             ':created_by' => $user['displayName'] ?? ($user['Username'] ?? null),
         ]);
 

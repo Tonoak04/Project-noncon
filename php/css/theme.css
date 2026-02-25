@@ -5,9 +5,10 @@
     --bg-panel: #ffffff;
     --text-primary: #0f233a;
     --text-muted: #666;
-    --accent: #1f78d1;
+    --accent: #0a2355;
     --radius-lg: 24px;
     --shadow: 0 10px 25px rgba(15, 35, 58, 0.15);
+    --button: #3390e2;
 }
 
 body {
@@ -24,7 +25,7 @@ body {
 }
 
 .app-brand-bar {
-    background: #0f3e68;
+    background: #0a2355;
     color: #fff;
     border-radius: var(--radius-lg);
     padding: clamp(0.85rem, 1.6vw, 1.2rem) clamp(1.5rem, 4vw, 2.5rem);
@@ -85,6 +86,7 @@ body {
 }
 
 .page-banner {
+    background: #0a2355;
     border-radius: 26px;
     padding: clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 4vw, 2.75rem);
     display: flex;
@@ -2011,7 +2013,8 @@ header[class*="admin-"][class*="-hero"] {
 }
 
 .action-card {
-    background: var(--bg-card);
+    background: #0a2355;
+    /* background: var(--bg-card); */
     color: #fff;
     border-radius: var(--radius-lg);
     padding: 1.25rem;
@@ -2414,7 +2417,7 @@ header[class*="admin-"][class*="-hero"] {
     align-items: center;
     gap: 0.35rem;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--button);
 }
 
 .quick-links {

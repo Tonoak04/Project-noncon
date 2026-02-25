@@ -227,35 +227,117 @@ export default function OilLogsAdmin() {
 
     const exportCsv = () => {
         if (!items.length) return;
-        const headers = ['Document Date', 'Document No', 'Machine', 'Project', 'Fuel Type', 'Liters', 'Operator', 'Assistant', 'Recorder', 'Ticket', 'Created', 'Fuel Meter Start', 'Fuel Meter End', 'Fuel Meter Total', 'Morning Hours', 'Afternoon Hours', 'OT Hours'];
-        const rows = items.map((row) => {
-            const assistantDisplay = row.Assistant_Name || row.Approval_Inspector_Name || row.Requester_Name || '';
-            const recorderDisplay = row.Recorder_Name || row.Approval_Oiler_Name || '';
-            return [
-                row.Document_Date || '',
-                row.Document_No || row.OilLog_Id,
-                row.Machine_Code || '',
-                row.Project_Name || '',
-                row.Fuel_Type || '',
-                row.Fuel_Amount_Liters || '',
-                row.Operator_Name || row.Requester_Name || '',
-                assistantDisplay,
-                recorderDisplay,
-                row.Fuel_Ticket_No || '',
-                row.Created_At || '',
-                row.Work_Meter_Start || '',
-                row.Work_Meter_End || '',
-                row.Work_Meter_Total || '',
-                row.Time_Morning_Total || '',
-                row.Time_Afternoon_Total || '',
-                row.Time_Ot_Total || '',
-            ];
+
+        const excludedKeys = new Set([
+            'OilLog_Id', 
+            'Checklist',
+            'MWL_Checklist',
+            'Fuel_Details',
+            'Photo_Attachments',
+            'Work_Order',
+            'Machine_Description',
+            'Requester_Name',
+            'MWL_Inspector_User_Id',
+            'Approval_Inspector_User_Id',
+            'Approval_Oiler_User_Id',
+            'Recorder_Name',
+            'Assistant_Name',
+            'Operation_Details',
+            'MWL_Id',
+            'Created_By',
+            'MWL_Work_Order',
+            'MWL_Document_No',
+            'Meter_Hour_Start', 'Meter_Hour_End',
+            'Odometer_Start', 'Odometer_End', 'Work_Meter_Start', 'Work_Meter_End', 'Work_Meter_Total',
+            'Time_Morning_Start', 'Time_Morning_End', 'Time_Morning_Total', 'Time_Afternoon_Start', 'Time_Afternoon_End', 'Time_Afternoon_Total',
+            'Time_Ot_Start', 'Time_Ot_End', 'Time_Ot_Total', 'Notes',
+            'MWL_Inspector_Name', 'MWL_Inspector_Approved_At','MWL_Inspector_Remark',
+        ]);
+        const preferredOrder = [
+            'Document_No', 'Document_Date', 'Project_Name', 'Location_Name',
+            'Machine_Code', 'Machine_Name', 'Fuel_Type','Fuel_Ticket_No','Fuel_Amount_Liters',
+            'Tank_Before_Liters', 'Tank_After_Liters',  'Fuel_Time', 'Operator_Name', 'Created_At',
+            'Approval_Oiler_Name', 'Approval_Oiler_Approved_At', 'Approval_Oiler_Remark',
+            'Approval_Inspector_Name', 'Approval_Inspector_Approved_At', 'Approval_Inspector_Remark',
+            'MWL_Meter_Hour', 'MWL_Odometer', 'MWL_Work_Meter_Start', 'MWL_Work_Meter_End', 'MWL_Work_Meter_Total',
+            'MWL_Work_Orders',
+            'MWL_Time_Morning_Start', 'MWL_Time_Morning_End', 'MWL_Time_Morning_Total',
+            'MWL_Time_Afternoon_Start', 'MWL_Time_Afternoon_End', 'MWL_Time_Afternoon_Total',
+            'MWL_Time_Ot_Start', 'MWL_Time_Ot_End', 'MWL_Time_Ot_Total', 'MWL_Operation_Details',
+        ];
+
+        const headerNameMap = {
+            Document_No: 'เลขที่เอกสาร',
+            Document_Date: 'วันที่เอกสาร',
+            Project_Name: 'โครงการ',
+            Location_Name: 'สถานที่',
+            Machine_Code: 'รหัสเครื่อง',
+            Machine_Name: 'ชื่อเครื่อง',
+            Fuel_Type: 'ชนิดน้ำมัน',
+            Fuel_Ticket_No: 'เลขที่ใบจ่าย',
+            Fuel_Amount_Liters: 'ปริมาณ (ลิตร)',
+            Tank_Before_Liters: 'ก่อนเติม (ลิตร)',
+            Tank_After_Liters: 'หลังเติม (ลิตร)',
+            Fuel_Time: 'เวลาเติม',
+            Operator_Name: 'ผู้ปฏิบัติงาน',
+            Created_At: 'บันทึกเมื่อ',
+            Approval_Oiler_Name: 'ผู้ตรวจ(น้ำมัน) ',
+            Approval_Oiler_Approved_At: 'เวลายืนยัน ',
+            Approval_Oiler_Remark: 'หมายเหตุ ',
+            Approval_Inspector_Name: 'ผู้ตรวจ(พขร.)',
+            Approval_Inspector_Approved_At: 'เวลายืนยัน',
+            Approval_Inspector_Remark: 'หมายเหตุ',
+            MWL_Meter_Hour: 'เลขชั่วโมง ',
+            MWL_Odometer: 'เลขไมล์ ',
+            MWL_Work_Meter_Start: 'มิเตอร์เริ่ม',
+            MWL_Work_Meter_End: 'มิเตอร์จบ',
+            MWL_Work_Meter_Total: 'มิเตอร์รวม',
+            MWL_Work_Orders: 'WBS/รายละเอียดงาน',
+            MWL_Time_Morning_Start: 'เช้าเริ่ม',
+            MWL_Time_Morning_End: 'เช้าจบ',
+            MWL_Time_Morning_Total: 'เช้ารวม (ชม.)',
+            MWL_Time_Afternoon_Start: 'บ่ายเริ่ม',
+            MWL_Time_Afternoon_End: 'บ่ายจบ',
+            MWL_Time_Afternoon_Total: 'บ่ายรวม (ชม.)',
+            MWL_Time_Ot_Start: 'OT เริ่ม',
+            MWL_Time_Ot_End: 'OT จบ',
+            MWL_Time_Ot_Total: 'OT รวม (ชม.)',
+            MWL_Operation_Details: 'รายละเอียดงาน',
+        };
+
+        const discovered = new Set();
+        items.forEach((row) => {
+            Object.keys(row || {}).forEach((key) => {
+                if (!excludedKeys.has(key)) {
+                    discovered.add(key);
+                }
+            });
         });
-        const csv = [headers, ...rows]
+
+        const headerKeys = [
+            ...preferredOrder.filter((key) => discovered.has(key)),
+            ...Array.from(discovered).filter((key) => !preferredOrder.includes(key)),
+        ];
+
+        const headerLabels = headerKeys.map((key) => headerNameMap[key] ?? key);
+        const formatCell = (value) => {
+            if (value === null || typeof value === 'undefined') return '';
+            if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+                try {
+                    return JSON.stringify(value);
+                } catch (_) {
+                    return String(value);
+                }
+            }
+            return String(value);
+        };
+
+        const csvRows = [headerLabels, ...items.map((row) => headerKeys.map((key) => formatCell(row[key])))]
             .map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(','))
             .join('\n');
+
         const bom = '\uFEFF';
-        const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([bom, csvRows], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -660,41 +742,6 @@ export default function OilLogsAdmin() {
                                         <p className="muted">ไม่มีข้อมูลเวลาปฏิบัติงาน</p>
                                     )}
                                 </section>
-                                <section className="detail-card-block">
-                                    <h3>รายการตรวจเช็ค</h3>
-                                    <div className="checklist-grid checklist-grid--static">
-                                        {checklistDetails.map((item) => {
-                                            let pillClass = 'status-pill status-pill--empty';
-                                            let pillLabel = 'ไม่ระบุ';
-                                            if (item.isOther) {
-                                                if (item.status === 'เลือก') {
-                                                    pillClass = 'status-pill status-pill--note';
-                                                    pillLabel = 'เลือกแล้ว';
-                                                } else if (item.status === 'ปกติ' || item.status === 'ผิดปกติ') {
-                                                    pillClass = `status-pill ${item.status === 'ปกติ' ? 'status-pill--ok' : 'status-pill--bad'}`;
-                                                    pillLabel = item.status;
-                                                }
-                                            } else if (item.status === 'ปกติ') {
-                                                pillClass = 'status-pill status-pill--ok';
-                                                pillLabel = 'ปกติ';
-                                            } else if (item.status === 'ผิดปกติ') {
-                                                pillClass = 'status-pill status-pill--bad';
-                                                pillLabel = 'ผิดปกติ';
-                                            }
-                                            return (
-                                                <div className="checklist-card" key={item.id}>
-                                                    <h4>{item.label}</h4>
-                                                    <div className="status-display">
-                                                        <span className={pillClass}>{pillLabel}</span>
-                                                    </div>
-                                                    {item.note && (
-                                                        <p className="checklist-note-value">{item.note}</p>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </section>
                                 {photoAttachments.length > 0 && (
                                     <section className="detail-card-block">
                                         <h3>รูปภาพประกอบ ({photoAttachments.length})</h3>
@@ -708,7 +755,6 @@ export default function OilLogsAdmin() {
                                                     className="detail-photo-item"
                                                 >
                                                     <img src={photo.url} alt={photo.name} loading="lazy" />
-                                                    <span className="muted small-text">{photo.name}</span>
                                                 </a>
                                             ))}
                                         </div>

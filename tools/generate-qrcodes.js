@@ -13,32 +13,26 @@ function escapeXml(unsafe) {
 }
 const { parse } = require('csv-parse/sync');
 const mysql = require('mysql2/promise');
-// Configuration
 const CSV_PATH = path.resolve(__dirname, '..', 'mysql-files', 'machines.csv');
 const OUT_DIR = path.resolve(__dirname, 'qrcodes');
 const PRINT_HTML = path.join(OUT_DIR, 'print.html');
-// The frontend route base for machine lists. We'll build a query string `?category=...&class=...` per-row.
 const BASE_URL = 'http://172.16.3.106:8080/#/machines'; 
 
-// DB connection config — matches php/server/server.php defaults and docker-compose mapping.
 const DB_CONFIG = {
   host: process.env.DB_HOST || '127.0.0.1',
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 9906,
   user: process.env.DB_USERNAME || 'root',
   password: process.env.DB_PASSWORD || 'rootpassword',
   database: process.env.DB_DATABASE || 'project_noncon',
-  // small connection timeout to fail fast if DB isn't available
   connectTimeout: 5000,
 };
 
 async function main() {
   await fs.ensureDir(OUT_DIR);
-  // clear previous outputs
   await fs.emptyDir(OUT_DIR);
   const csvText = await fs.readFile(CSV_PATH, 'utf8');
   const rows = parse(csvText, { columns: true, skip_empty_lines: true });
 
-  // Connect to DB to map Equipment -> Machine_Id
   let db;
   try {
     db = await mysql.createPool(DB_CONFIG);
@@ -53,7 +47,6 @@ async function main() {
     const equipment = (r.Equipment || r['Equipment'] || '').toString().trim();
     if (!equipment) continue;
 
-    // Find numeric Machine_Id in DB using the Equipment code
     let machineId = null;
     try {
       const [rowsDb] = await db.execute('SELECT Machine_Id FROM Machines WHERE Equipment = ? LIMIT 1', [equipment]);
@@ -69,34 +62,37 @@ async function main() {
       continue;
     }
 
-    // Build a query URL that points to the machine list filtered by category and class.
-    // Try several common CSV header names and fall back to the first CSV column or equipment/machineId. 
     const category = (r['Machine_Type'] || r['Machine Type'] || r['Category'] || r['category'] || Object.values(r)[0] || '').toString().trim();
     const cls = (r['Class'] || r['class'] || r['ClassName'] || r['Class_Id'] || r['CLS'] || equipment || machineId || '').toString().trim();
     const payload = `${BASE_URL}/${encodeURIComponent(String(machineId))}?category=${encodeURIComponent(category)}&class=${encodeURIComponent(cls)}`;
     const safeName = equipment.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 60) || 'unknown';
     const filename = path.join(OUT_DIR, `machine-${safeName}.png`);
 
-    // Generate QR as buffer first
     const qrBuffer = await QRCode.toBuffer(payload, {
       type: 'png',
       width: 600,
       margin: 6,
-      errorCorrectionLevel: 'Q',
+      errorCorrectionLevel: 'H', 
     });
 
-    // Create a text SVG for the bottom label area (height 120)
+    const overlayLine1 = equipment;
+    const overlayLine2 = cls || String(machineId || '');
+    const overlaySvg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">
+  <rect x="190" y="210" width="220" height="180" rx="16" ry="16" fill="#ffffff" fill-opacity="0.85" />
+</svg>`;
+
     const labelHeight = 120;
     const svgText = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="${labelHeight}">
-  <rect width="100%" height="100%" fill="#ffffff" />
-  <text x="50%" y="50%" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#111111" dominant-baseline="middle" text-anchor="middle">${escapeXml(equipment)}</text>
+  <rect x="100" y="18" width="400" height="84" rx="14" ry="14" fill="#ffffff" fill-opacity="0.9" />
+  <text x="50%" y="50%" font-family="Arial, Helvetica, ans-serif" font-size="64" fill="#000000" font-weight="600" dominant-baseline="middle" text-anchor="middle">${escapeXml(equipment)}</text>
 </svg>`;
 
-    // Extend the QR canvas downward and composite the SVG label
     await sharp(qrBuffer)
+      .composite([{ input: Buffer.from(overlaySvg), top: 0, left: 0 }])
       .extend({ top: 0, bottom: labelHeight, left: 0, right: 0, background: { r: 255, g: 255, b: 255 } })
-      .composite([{ input: Buffer.from(svgText), top: 600, left: 0 }])
+      .composite([{ input: Buffer.from(svgText), top: 250, left: 0 }])
       .png()
       .toFile(filename);
 
@@ -104,10 +100,8 @@ async function main() {
     console.log('Wrote', filename, '->', payload, '(equipment:', equipment, ')');
   }
 
-  // close pool
   try { await db.end(); } catch (e) { /* ignore */ }
 
-  // Create a simple print HTML with captions (equipment id under each QR)
   const htmlParts = [];
   htmlParts.push('<!doctype html>');
   htmlParts.push('<html><head><meta charset="utf-8"><title>QR Codes</title>');

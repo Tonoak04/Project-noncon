@@ -13,6 +13,7 @@ import { BASE_DEPARTMENT_OPTIONS } from './checklistShared.js';
 
 export default function MachineWorkLog() {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const buildInitialTimeFields = () => {
         const fields = {};
         (Array.isArray(oilTimeSegments) ? oilTimeSegments : []).forEach((seg) => {
@@ -198,8 +199,11 @@ export default function MachineWorkLog() {
     const [approvalCopyFeedback, setApprovalCopyFeedback] = useState('');
     const [approvalQrDataUrl, setApprovalQrDataUrl] = useState('');
     const [projectOptions, setProjectOptions] = useState([]);
+    const [successMessage, setSuccessMessage] = useState('');
     const [approvalStatus, setApprovalStatus] = useState(null);
+    const [approvalMonitor, setApprovalMonitor] = useState({ machineWorkLogId: null, token: '' });
     const approvalWatcherRef = useRef(null);
+    const approvalCompletionHandledRef = useRef(false);
 
     const resolveApprovalPath = (path = '') => {
         if (!path) return '';
@@ -215,17 +219,30 @@ export default function MachineWorkLog() {
         }
     };
 
-    const closeApprovalPreview = () => {
+    const stopTrackingApproval = () => {
         stopApprovalWatcher();
+        setApprovalMonitor({ machineWorkLogId: null, token: '' });
+    };
+
+    const cancelApprovalTracking = () => {
+        stopTrackingApproval();
+        setApprovalStatus(null);
+    };
+
+    const closeApprovalPreview = (options = {}) => {
+        const { stopTracking = false } = options;
+        if (stopTracking) {
+            cancelApprovalTracking();
+        }
         setApprovalPreview((prev) => ({ ...prev, visible: false }));
         setApprovalCopyFeedback('');
         setApprovalQrDataUrl('');
-        setApprovalStatus(null);
-        navigate('/worksite', { replace: true });
     };
 
     const confirmCloseApprovalPreview = () => {
-        const shouldClose = typeof window === 'undefined' ? true : window.confirm('ยืนยันที่จะปิดหน้าต่างนี้หรือไม่? หากปิดจะกลับไปหน้าหลักและไม่สามารถเปิดหน้านี้ได้อีก');
+        const shouldClose = typeof window === 'undefined'
+            ? true
+            : window.confirm('ยืนยันที่จะปิดหน้าต่างนี้หรือไม่? ระบบยังติดตามสถานะของผู้ตรวจสอบให้อัตโนมัติ และสามารถปิดการติดตามได้ภายหลัง');
         if (shouldClose) closeApprovalPreview();
     };
 
@@ -294,7 +311,8 @@ export default function MachineWorkLog() {
     }, [approvalPreview.expiresAt]);
 
     useEffect(() => {
-        if (!approvalPreview.visible || !approvalPreview.token || !approvalPreview.oilLogId) {
+        const { machineWorkLogId, token } = approvalMonitor;
+        if (!machineWorkLogId || !token) {
             stopApprovalWatcher();
             return;
         }
@@ -302,16 +320,23 @@ export default function MachineWorkLog() {
 
         const fetchStatus = async () => {
             try {
-                const data = await apiGet(`/api/machine_work_log_approvals.php?machineWorkLogId=${approvalPreview.oilLogId}&token=${approvalPreview.token}`);
+                const data = await apiGet(`/api/machine_work_log_approvals.php?machineWorkLogId=${machineWorkLogId}&token=${encodeURIComponent(token)}`);
                 if (cancelled) return;
                 setApprovalStatus({
-                    inspectorName: data?.approval?.inspector?.full_name || '',
-                    inspectorDone: Boolean(data?.approval?.inspector?.approved_at),
+                    machineWorkLogId,
+                    documentNo: data?.machineWorkLog?.Document_No || data?.machineWorkLog?.document_no || '',
+                    inspectorName: data?.approval?.inspector?.full_name || data?.approval?.inspector?.fullName || '',
+                    inspectorDone: Boolean(data?.approval?.inspector?.approved_at || data?.approval?.inspector?.approvedAt),
                     fetchedAt: Date.now(),
+                    error: '',
                 });
             } catch (err) {
-                if (!cancelled && err?.name !== 'AbortError') {
-                    setApprovalStatus((prev) => (prev ? { ...prev, error: err.message || 'โหลดสถานะไม่สำเร็จ' } : { error: err.message || 'โหลดสถานะไม่สำเร็จ' }));
+                if (!cancelled) {
+                    setApprovalStatus((prev) => ({
+                        ...(prev || {}),
+                        machineWorkLogId,
+                        error: err.message || 'โหลดสถานะไม่สำเร็จ',
+                    }));
                 }
             }
         };
@@ -324,13 +349,33 @@ export default function MachineWorkLog() {
             cancelled = true;
             stopApprovalWatcher();
         };
-    }, [approvalPreview.visible, approvalPreview.token, approvalPreview.oilLogId]);
+    }, [approvalMonitor.machineWorkLogId, approvalMonitor.token]);
 
     useEffect(() => {
-        if (approvalStatus?.inspectorDone) {
-            stopApprovalWatcher();
+        if (!approvalStatus?.inspectorDone) {
+            approvalCompletionHandledRef.current = false;
+            return undefined;
         }
-    }, [approvalStatus?.inspectorDone]);
+        if (approvalCompletionHandledRef.current) {
+            return undefined;
+        }
+        approvalCompletionHandledRef.current = true;
+        setSuccessMessage('บันทึกข้อมูลเรียบร้อย (ผู้ตรวจสอบยืนยันแล้ว)');
+        stopTrackingApproval();
+        setApprovalPreview((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        const timer = window.setTimeout(() => setSuccessMessage(''), 4000);
+        const shouldReturnHome = typeof window !== 'undefined'
+            ? window.confirm('ผู้ตรวจสอบยืนยันแล้ว ต้องการกลับไปหน้าหลักตอนนี้หรือไม่?')
+            : false;
+        if (shouldReturnHome) {
+            navigate('/worksite', { replace: true });
+        }
+        return () => window.clearTimeout(timer);
+    }, [approvalStatus?.inspectorDone, navigate]);
+
+    useEffect(() => () => {
+        cancelApprovalTracking();
+    }, []);
 
     const operatorDefaults = useMemo(() => resolveOperatorDefaults(user), [user]);
 
@@ -354,7 +399,6 @@ export default function MachineWorkLog() {
         checklist: createChecklistState(),
         checklistOtherNote: '',
     }));
-    const checklistStatuses = ['ปกติ', 'ผิดปกติ'];
     const [logs, setLogs] = useState([]);
     const [machines, setMachines] = useState([]);
     const [driverOptions, setDriverOptions] = useState([]);
@@ -365,7 +409,6 @@ export default function MachineWorkLog() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const machinePickerRef = useRef(null);
-    const navigate = useNavigate();
     const [personnelError, setPersonnelError] = useState('');
     const canAutoFillOperator = useMemo(() => userHasAnyRole(user, operatorRoleKeys), [user]);
 
@@ -685,21 +728,6 @@ export default function MachineWorkLog() {
         });
     };
 
-    const handleChecklistOtherNoteChange = (event) => {
-        const value = event.target.value;
-        setForm((prev) => {
-            if (prev.checklist[oilChecklistOtherId] !== 'เลือก') {
-                return prev;
-            }
-            return { ...prev, checklistOtherNote: value };
-        });
-    };
-
-    const handleChecklistSingleToggle = (itemId) => (event) => {
-        const checked = event.target.checked;
-        handleChecklistChange(itemId, checked ? 'เลือก' : '');
-    };
-
     const handleMeterChange = (field) => (e) => {
         const val = e.target.value;
         setForm((prev) => {
@@ -735,48 +763,73 @@ export default function MachineWorkLog() {
                 return;
             }
 
-            const requiredChecklistItems = (Array.isArray(oilChecklistItems) ? oilChecklistItems : []).filter((item) => item.id !== oilChecklistOtherId);
-            const allRequiredChecklistSelected = requiredChecklistItems.every((item) => String((form.checklist || {})[item.id] || '').trim() !== '');
-            if (!allRequiredChecklistSelected) {
-                setError('กรุณาเลือกสถานะของรายการตรวจเช็คทุกข้อ (ยกเว้น "อื่นๆ")');
-                return;
+            if (!canAutoFillOperator) {
+                if (!form.operatorAccountId || !form.operatorName) {
+                    setError('กรุณาเลือกพนักงานขับรถ');
+                    return;
+                }
             }
 
-            const payload = { ...form };
+            const enforcedOperator = canAutoFillOperator ? resolveOperatorDefaults(user) : null;
+            const payload = enforcedOperator ? { ...form, ...enforcedOperator } : { ...form };
             if (!Array.isArray(payload.workOrders)) {
                 payload.workOrders = Array.isArray(form.workOrders) ? form.workOrders : (form.workOrders ? [form.workOrders] : []);
             }
             payload.workOrder = payload.workOrders && payload.workOrders.length ? payload.workOrders[0] : (payload.workOrder || '');
-            const res = await apiPost('/api/machine_work_logs.php', payload).catch(() => null);
-            if (res && res.item) {
-                setLogs((prev) => [res.item, ...prev]);
-            } else {
-                setLogs((prev) => [{ id: Date.now(), ...payload }, ...prev]);
+            const res = await apiPost('/api/machine_work_logs.php', payload);
+            if (!res || !res.item || !res.approval) {
+                setError('บันทึกไม่สำเร็จ หรือไม่ได้รับลิงก์อนุมัติจากระบบ');
+                return;
             }
 
-            const approvalPayload = res?.approval || null;
-            const approvalUrl = approvalPayload ? resolveApprovalPath(approvalPayload.path || approvalPayload.url || '') : '';
-            const approvalLogId = res?.item?.MachineWorkLog_Id ?? res?.item?.machineWorkLogId ?? res?.item?.id ?? null;
-            if (approvalUrl) {
-                stopApprovalWatcher();
+            approvalCompletionHandledRef.current = false;
+            setLogs((prev) => [res.item, ...prev]);
+
+            const approvalPayload = res.approval;
+            const approvalLogId = res.item?.MachineWorkLog_Id ?? res.item?.machineWorkLogId ?? res.item?.id ?? null;
+            const approvalToken = approvalPayload.token || '';
+            const approvalPath = approvalPayload.path || approvalPayload.url || (approvalLogId && approvalToken
+                ? `#/machine-work-approval?machineWorkLogId=${approvalLogId}&token=${approvalToken}`
+                : '');
+            const approvalUrl = approvalPath ? resolveApprovalPath(approvalPath) : '';
+
+            stopTrackingApproval();
+            setApprovalStatus(null);
+
+            let nextStatus = null;
+            if (approvalUrl && approvalToken && approvalLogId) {
                 setApprovalPreview({
                     visible: true,
                     url: approvalUrl,
-                    token: approvalPayload.token || '',
+                    token: approvalToken,
                     expiresAt: approvalPayload.expires_at || approvalPayload.expiresAt || '',
                     oilLogId: approvalLogId,
                 });
+                setApprovalMonitor({ machineWorkLogId: approvalLogId, token: approvalToken });
+                nextStatus = {
+                    machineWorkLogId: approvalLogId,
+                    inspectorName: '',
+                    inspectorDone: false,
+                    fetchedAt: Date.now(),
+                    error: '',
+                };
+                setSuccessMessage('บันทึกข้อมูลเรียบร้อย (รอผู้ตรวจสอบยืนยัน)');
+                window.setTimeout(() => setSuccessMessage(''), 3000);
+            } else {
+                setError('บันทึกสำเร็จ แต่ไม่พบลิงก์ QR สำหรับผู้ตรวจสอบ');
             }
-            const statusPayload = res?.approvalStatus || null;
-            if (statusPayload) {
-                setApprovalStatus({
+
+            const statusPayload = res.approvalStatus || null;
+            if (statusPayload && approvalLogId) {
+                nextStatus = {
+                    machineWorkLogId: approvalLogId,
                     inspectorName: statusPayload.inspectorName || '',
                     inspectorDone: Boolean(statusPayload.inspectorDone),
+                    fetchedAt: Date.now(),
                     error: statusPayload.error || '',
-                });
-            } else {
-                setApprovalStatus(null);
+                };
             }
+            setApprovalStatus(nextStatus);
             setForm((prev) => ({
                 ...prev,
                 operationDetails: '',
@@ -1035,66 +1088,7 @@ export default function MachineWorkLog() {
                                 );
                             })}
                         </div>
-                        <header>
-                            <h3>รายการตรวจเช็คเครื่องจักร</h3>
-                        </header>
-                        <div className="checklist-grid">
-                            {oilChecklistItems.map((item) => {
-                                const isSingle = Boolean(item.singleOption);
-                                const singleSelected = isSingle ? form.checklist[item.id] === 'เลือก' : false;
-                                const shouldShowNote = item.allowNote && (isSingle ? singleSelected : Boolean(form.checklist[item.id]));
-                                const noteValue = item.id === oilChecklistOtherId ? form.checklistOtherNote : '';
-                                return (
-                                    <div className="checklist-card" key={item.id}>
-                                        <h4>{item.label}</h4>
-                                        {isSingle ? (
-                                            <div className="check-status check-status--single">
-                                                <label className={`status-chip status-chip--single${singleSelected ? ' status-chip--single-active' : ''}`}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={singleSelected}
-                                                        onChange={handleChecklistSingleToggle(item.id)}
-                                                    />
-                                                    <span className="single-check-icon" aria-hidden="true" />
-                                                </label>
-                                            </div>
-                                        ) : (
-                                            <div className="check-status">
-                                                {checklistStatuses.map((status) => {
-                                                    const isActive = form.checklist[item.id] === status;
-                                                    const tone = status === 'ปกติ' ? 'ok' : 'bad';
-                                                    return (
-                                                        <label key={status} className={`status-chip${isActive ? ` status-chip--${tone}` : ''}`}>
-                                                            <input
-                                                                type="radio"
-                                                                name={`check-${item.id}`}
-                                                                value={status}
-                                                                checked={isActive}
-                                                                onChange={() => handleChecklistChange(item.id, status)}
-                                                            />
-                                                            <span>{status}</span>
-                                                        </label>
-                                                    );
-                                                })}
-                                                <button type="button" className="status-chip status-chip--ghost" onClick={() => handleChecklistChange(item.id, '')}>
-                                                    ล้าง
-                                                </button>
-                                            </div>
-                                        )}
-                                        {shouldShowNote && (
-                                            <input
-                                                type="text"
-                                                className="checklist-note-input"
-                                                value={noteValue}
-                                                onChange={handleChecklistOtherNoteChange}
-                                                placeholder={item.notePlaceholder || 'ระบุรายละเอียดเพิ่มเติม'}
-                                            />
-                                        )}
-                                    </div>
-
-                                );
-                            })}
-                        </div>
+                        
                         <header>
                             <h3>ผู้รับผิดชอบ</h3>
                             <p>ระบบจะแสดงเฉพาะชื่อพนักงานขับ ส่วนผู้ตรวจสอบจะยืนยันผ่าน QR หลังบันทึก</p>
@@ -1162,6 +1156,7 @@ export default function MachineWorkLog() {
                             </div>
                         </div>
                         {error && <div className="error-row">{error}</div>}
+                        {successMessage && <div className="success-row">{successMessage}</div>}
                         <button type="submit" className="button primary full-width" disabled={saving}>
                             {saving ? 'กำลังบันทึก…' : 'บันทึก'}
                         </button>

@@ -80,7 +80,7 @@ export default function AccountBar() {
                                 left: 18,
                                 padding: '10px 14px',
                                 background: 'rgba(255,255,255,0.98)',
-                                color: '#0f3e68',
+                                color: '#467ea5',
                                 borderRadius: 8,
                                 boxShadow: '0 6px 18px rgba(15,62,104,0.12)',
                                 zIndex: 80,
