@@ -44,3 +44,13 @@ DockerFile
 docker-compose.yml
 docker-entrypoint.sh
 docker/
+
+import_run.ps1
+machines_output.json
+package-lock.json
+package.json
+readme.md
+test_item_public.json
+cookies.txt
+
+qweqwe/
