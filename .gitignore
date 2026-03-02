@@ -3,7 +3,6 @@ node_modules/
 **/node_modules/
 
 # Frontend build
-php/frontend/dist/
 php/frontend/.vite/
 
 # Local uploads / logs / caches
