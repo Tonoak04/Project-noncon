@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/../server/server.php';
-require_once __DIR__ . '/../server/auth.php';
+require_once __DIR__ . '/server.php';
+require_once __DIR__ . '/auth.php';
 
 // CORS for frontend (vite dev or built app) — allow requesting origin and credentials
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';

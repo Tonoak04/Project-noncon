@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/server/server.php';
+require_once __DIR__ . '/api/server.php';
 
 $connectionError = null;
 $dbInfo = null;

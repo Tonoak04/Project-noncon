@@ -29,7 +29,7 @@ SET SESSION autocommit=0;
 SET SESSION unique_checks=0;
 SET SESSION foreign_key_checks=0;
 
-LOAD DATA INFILE '/var/lib/mysql-files/machines.csv'
+LOAD DATA INFILE '/path/to/machines.csv'
 INTO TABLE Machines
 CHARACTER SET utf8mb4
 FIELDS TERMINATED BY ',' ENCLOSED BY '"' 

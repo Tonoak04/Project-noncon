@@ -1,5 +1,5 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/../server/auth.php';
+require_once __DIR__ . '/auth.php';
 
 handle_login();

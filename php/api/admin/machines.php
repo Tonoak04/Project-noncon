@@ -1,6 +1,61 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/../../server/auth.php';
+require_once __DIR__ . '/../auth.php';
+
+function normalize_machine_date($value): ?string
+{
+    if ($value instanceof DateTimeInterface) {
+        return $value->format('Y-m-d');
+    }
+    $str = trim((string)$value);
+    if ($str === '') {
+        return null;
+    }
+    $normalized = str_replace(['.', ','], '/', $str);
+    $normalized = str_replace('-', '/', $normalized);
+    $normalized = preg_replace('/\s+/', '', $normalized);
+    if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/', $normalized, $m)) {
+        $day = (int)$m[1];
+        $month = (int)$m[2];
+        $year = (int)$m[3];
+        if ($year < 100) {
+            $year += ($year >= 70 ? 1900 : 2000);
+        }
+        if ($year > 2400) {
+            $year -= 543;
+        }
+        if (checkdate($month, $day, $year)) {
+            return sprintf('%04d-%02d-%02d', $year, $month, $day);
+        }
+    }
+    try {
+        $dt = new DateTime($str);
+        return $dt->format('Y-m-d');
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function normalize_machine_field(string $field, $value)
+{
+    if (is_string($value)) {
+        $value = trim($value);
+    }
+    if ($value === '' || $value === null) {
+        return null;
+    }
+    switch ($field) {
+        case 'Tax':
+        case 'Insurance':
+        case 'Registered':
+            return normalize_machine_date($value);
+        case 'Duties':
+            $numeric = preg_replace('/[^0-9.\-]/', '', (string)$value);
+            return $numeric === '' ? null : (int)round((float)$numeric);
+        default:
+            return $value;
+    }
+}
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 try {
@@ -35,6 +90,31 @@ try {
         parse_str($raw ?: '', $input);
     }
 
+    $machineFields = [
+        'Equipment',
+        'Machine_Type',
+        'Company_code',
+        'Recipient',
+        'Description',
+        'Status',
+        'Specification',
+        'Chassis_Number',
+        'Engine_Serial_Number',
+        'Engine_Model',
+        'Engine_Power',
+        'Engine_Capacity',
+        'License_plate_Number',
+        'Tax',
+        'Insurance',
+        'Duties',
+        'Note',
+        'Class',
+        'Assest_Number',
+        'Manufacture',
+        'Keyword',
+        'Registered',
+    ];
+
     if ($method === 'POST' && isset($_GET['action']) && $_GET['action'] === 'bulk-update') {
         $user = require_role(['admin']);
         $hasUpdates = isset($input['items']) && is_array($input['items']);
@@ -44,7 +124,7 @@ try {
             exit;
         }
         $pdo = db_connection();
-        $allowed = ['Equipment','Machine_Type','Company_code','Recipient','Description','Status','License_plate_Number','Class','Assest_Number','Keyword','Note'];
+        $allowed = $machineFields;
         $updatedRows = [];
         $updatedCount = 0;
         $insertedRows = [];
@@ -66,7 +146,7 @@ try {
                     foreach ($allowed as $field) {
                         if (array_key_exists($field, $row)) {
                             $set[] = "`$field` = :$field";
-                            $params[$field] = $row[$field];
+                            $params[$field] = normalize_machine_field($field, $row[$field]);
                         }
                     }
                     if (empty($set)) {
@@ -85,10 +165,17 @@ try {
             }
 
             if ($hasInserts) {
-                $fieldList = array_unique(array_merge(['Equipment'], $allowed));
+                $fieldList = array_values(array_unique(array_merge(['Equipment'], $allowed)));
                 $insertStmt = $pdo->prepare(
                     'INSERT INTO Machines (' . implode(', ', $fieldList) . ')
                     VALUES (:' . implode(', :', $fieldList) . ')'
+                );
+                $selectByEquipmentStmt = $pdo->prepare('SELECT Machine_Id FROM Machines WHERE Equipment = ? LIMIT 1');
+                $updateAssignments = array_map(static function ($field) {
+                    return "`$field` = :$field";
+                }, $fieldList);
+                $upsertFromInsertStmt = $pdo->prepare(
+                    'UPDATE Machines SET ' . implode(', ', $updateAssignments) . ' WHERE Machine_Id = :Machine_Id'
                 );
                 foreach ($input['newItems'] as $row) {
                     if (!is_array($row)) {
@@ -98,18 +185,30 @@ try {
                     if ($equipment === '') {
                         continue;
                     }
+                    $selectByEquipmentStmt->execute([$equipment]);
+                    $existingId = (int)$selectByEquipmentStmt->fetchColumn();
                     $params = [];
                     foreach ($fieldList as $field) {
                         if ($field === 'Equipment') {
                             $params[$field] = $equipment;
-                            continue;
-                        }
-                        if (array_key_exists($field, $row)) {
-                            $params[$field] = $row[$field];
                         } else {
-                            $params[$field] = null;
+                            $params[$field] = array_key_exists($field, $row)
+                                ? normalize_machine_field($field, $row[$field])
+                                : null;
                         }
                     }
+                    if ($existingId > 0) {
+                        $params['Machine_Id'] = $existingId;
+                        $upsertFromInsertStmt->execute($params);
+                        $selectStmt->execute([$existingId]);
+                        $updated = $selectStmt->fetch();
+                        if ($updated) {
+                            $updatedRows[] = $updated;
+                            $updatedCount++;
+                        }
+                        continue;
+                    }
+
                     $insertStmt->execute($params);
                     $newId = (int)$pdo->lastInsertId();
                     if ($newId > 0) {
@@ -138,13 +237,20 @@ try {
 
     if ($method === 'POST') {
         $user = require_role(['admin']);
-        $fields = ['Equipment','Machine_Type','Company_code','Recipient','Description','Status','License_plate_Number'];
+        $fields = $machineFields;
         $data = [];
         foreach ($fields as $f) {
-            $data[$f] = isset($input[$f]) ? $input[$f] : null;
+            $data[$f] = array_key_exists($f, $input) ? normalize_machine_field($f, $input[$f]) : null;
+        }
+        $equipment = trim((string)($data['Equipment'] ?? ''));
+        if ($equipment === '') {
+            json_response(['error' => 'Equipment is required'], 400);
+            exit;
         }
         $pdo = db_connection();
-        $stmt = $pdo->prepare('INSERT INTO Machines (Equipment, Machine_Type, Company_code, Recipient, Description, Status, License_plate_Number) VALUES (:Equipment, :Machine_Type, :Company_code, :Recipient, :Description, :Status, :License_plate_Number)');
+        $columns = implode(', ', array_keys($data));
+        $placeholders = ':' . implode(', :', array_keys($data));
+        $stmt = $pdo->prepare("INSERT INTO Machines ($columns) VALUES ($placeholders)");
         $stmt->execute($data);
         $id = (int)$pdo->lastInsertId();
         $stmt = $pdo->prepare('SELECT * FROM Machines WHERE Machine_Id = ? LIMIT 1');
@@ -161,13 +267,13 @@ try {
             json_response(['error' => 'Missing Machine_Id'], 400);
             exit;
         }
-        $fields = ['Equipment','Machine_Type','Company_code','Recipient','Description','Status','License_plate_Number'];
+        $fields = $machineFields;
         $set = [];
         $params = [];
         foreach ($fields as $f) {
             if (array_key_exists($f, $input)) {
                 $set[] = "`$f` = :$f";
-                $params[$f] = $input[$f];
+                $params[$f] = normalize_machine_field($f, $input[$f]);
             }
         }
         if (empty($set)) {
@@ -202,6 +308,6 @@ try {
 
     json_response(['error' => 'Method Not Allowed'], 405);
 } catch (Throwable $e) {
-    error_log('[admin/machines] ' . $e->getMessage());
+    error_log('[admin/machines] ' . $e->getMessage());  
     json_response(['error' => 'Internal error'], 500);
 }

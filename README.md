@@ -3,7 +3,7 @@
 - All frontend code (React) and backend PHP live inside this `php/` directory for easier container mounting.
 - React application lives under `php/frontend/` (Vite + React 18). Build output is written to `php/frontend/dist`.
 - Shared styling lives in `php/css/` and is imported into React via the alias `@css/*`.
-- Backend helper utilities (database, APIs) remain in `php/server/`.
+- Backend helper utilities (database, APIs) now live directly under `php/api/`.
 - Docker image installs Node.js and runs `npm install` + `npm run build` automatically in `php/frontend` every time the PHP container starts, so visiting `http://localhost:8080` just works.
 
 ## Local workflow

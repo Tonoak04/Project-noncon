@@ -58,9 +58,11 @@ if (file_exists($distIndex)) {
         <p>
             API test links:
             <br/>
-            <a href="/server/auth.php">/api/login|me|logout</a>
+            <a href="/api/login" target="_blank" rel="noopener">/api/login</a>
             &nbsp;|&nbsp;
-            <a href="/server/machines.php">/api/machines[/:id]</a>
+            <a href="/api/me" target="_blank" rel="noopener">/api/me</a>
+            &nbsp;|&nbsp;
+            <a href="/api/machines" target="_blank" rel="noopener">/api/machines[/:id]</a>
         </p>
     </div>
 </body>

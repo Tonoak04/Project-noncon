@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__ . '/../../server/auth.php';
+require_once __DIR__ . '/../auth.php';
 // include server helpers to access DB connection when needed
-require_once __DIR__ . '/../../server/server.php';
+require_once __DIR__ . '/../server.php';
 
 if (!function_exists('json_response')) {
     function json_response(array $payload, int $code = 200): void

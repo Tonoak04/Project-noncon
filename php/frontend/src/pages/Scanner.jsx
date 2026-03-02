@@ -6,6 +6,7 @@ export default function Scanner() {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [scanning, setScanning] = useState(false);
+    const scanningRef = useRef(false); // keep real-time flag for animation loop
     const [status, setStatus] = useState('พร้อมสแกน');
     const streamRef = useRef(null);
     const [errorMessage, setErrorMessage] = useState(null);
@@ -35,6 +36,7 @@ export default function Scanner() {
                 await videoRef.current.play();
             }
             setScanning(true);
+            scanningRef.current = true;
             setStatus('สแกนกล้อง: เล็ง QR ภายในกรอบ');
             requestAnimationFrame(tick);
         } catch (err) {
@@ -43,11 +45,13 @@ export default function Scanner() {
             setErrorMessage(msg);
             setStatus('ไม่สามารถเข้าถึงกล้องได้');
             setScanning(false);
+            scanningRef.current = false;
         }
     }
 
     function stopCamera() {
         setScanning(false);
+        scanningRef.current = false;
         setStatus('หยุดสแกน');
         const s = streamRef.current;
         if (s) {
@@ -82,7 +86,7 @@ export default function Scanner() {
     }
 
     function tick() {
-        if (!scanning) return;
+        if (!scanningRef.current) return;
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) {

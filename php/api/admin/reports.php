@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../server/auth.php';
+require_once __DIR__ . '/../auth.php';
 
 function normalize_param(?string $value, int $maxLen = 100): ?string
 {

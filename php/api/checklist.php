@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../server/server.php';
-require_once __DIR__ . '/../server/auth.php';
+require_once __DIR__ . '/server.php';
+require_once __DIR__ . '/auth.php';
 
 const DAILY_CHECKLIST_PRESETS = [
     1 => ['title' => 'ระดับน้ำมันเครื่อง', 'standard' => 'อยู่ระดับที่กำหนด', 'frequency' => 'รายวัน', 'is_signature' => false],

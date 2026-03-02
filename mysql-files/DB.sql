@@ -88,51 +88,59 @@ CREATE TABLE IF NOT EXISTS Report (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Seed one Center user (change later as needed)
-INSERT INTO Center (Username, Password, Address, CenterName, Role)
+INSERT INTO Center (Username, Password, Address, CenterName, Role, Name, Lastname, Phone, Employee_Id)
 VALUES (
   'admin',
   '$2y$10$ndnwCCo/TEe5eSUkBbc6ze/DjNACXWI0dpdJ5CxHAg5JZGT1v3Wfa',
   'HQ',
   'Main Center',
-  'admin'
+  'admin',
+  'Ton',
+  'Oak',
+  '0812345678',
+  'Admin01'
 )
-INSERT INTO Center (Username, Password, Address, CenterName, Role)
+INSERT INTO Center (Username, Password, Address, CenterName, Role, Name, Lastname, Phone, Employee_Id)
 VALUES (
   'user1',
   '$2y$10$ndnwCCo/TEe5eSUkBbc6ze/DjNACXWI0dpdJ5CxHAg5JZGT1v3Wfa',
   'HQ',
   'Main Center',
-  'operator'
+  'operator',
+  'สมปอง',
+  'ดีใจ',
+  '0812345678',
+  'User01'
 )
 INSERT INTO Center (Username, Password, Address, CenterName, Role, Name, Lastname, Phone, Employee_Id)
 VALUES (
-  'EMP002',
-  '$2y$10$50bnTot7zAAgXDy279CIDeusdcSU.2t7/4Jzdn16djqSfZkXKkLV6',
+  'foreman01',
+  '$2y$10$ndnwCCo/TEe5eSUkBbc6ze/DjNACXWI0dpdJ5CxHAg5JZGT1v3Wfa',
   'HQ',
   'Main Center',
   'Foreman',
   'สมชาย',
   'ใจดี',
   '0812345678',
-  'EMP002'
+  'foreman01'
 )
 
 INSERT INTO Center (Username, Password, Address, CenterName, Role, Name, Lastname, Phone, Employee_Id)
 VALUES (
-  'EMP003',
-  '$2y$10$gHqEd67aisMmEuSCdZif6eyOXC6zUZ0hzaeZa.H0Qv6gwleMTAF4C',
+  'driver01',
+  '$2y$10$ndnwCCo/TEe5eSUkBbc6ze/DjNACXWI0dpdJ5CxHAg5JZGT1v3Wfa',
   'HQ',
   'Main Center',
   'driver',
   'สมศักดิ์',
   'ดีใจ',
   '0912345678',
-  'EMP003'
+  'driver01'
 )
 
 INSERT INTO Center (Username, Password, Address, CenterName, Role, Name, Lastname, Phone, Employee_Id)
 VALUES (
-  'Oiler01',
+  'oiler01',
   '$2y$10$ndnwCCo/TEe5eSUkBbc6ze/DjNACXWI0dpdJ5CxHAg5JZGT1v3Wfa',
   'HQ',
   'Main Center',
@@ -140,7 +148,7 @@ VALUES (
   'ชูใจ',
   'ทองดี',
   '0123456789',
-  'Oiler01'
+  'oiler01'
 )
 
 'สมปอง'

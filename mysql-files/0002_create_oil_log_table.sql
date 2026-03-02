@@ -1,4 +1,4 @@
--- Migration: create OilLog table for fuel/oil log workflow managed by php/server/oillogs.php
+-- Migration: create OilLog table for fuel/oil log workflow managed by php/api/server/oillogs.php
 -- Run this in the `project_noncon` schema before using the digital oil log UI.
 
 CREATE TABLE IF NOT EXISTS `OilLog` (

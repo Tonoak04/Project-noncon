@@ -7,7 +7,7 @@ import checklistImage from '../images/form.png';
 import chechkdayimage from '../images/formcheckday.png';
 import oilimage from '../images/oil.png';
 import reportimage from '../images/report.png';
-import scannerimage from '../images/scanner.png';
+// import scannerimage from '../images/scanner.png';
 import machineimage from '../images/machine.png';
 
 
@@ -80,12 +80,12 @@ export const actionCards = [
         description: 'รายงานปัญหาหรือข้อเสนอแนะต่างๆ',
         to: '/reports',
     },
-    {
-        id: 'scanner',
-        title: 'เครื่องอ่านบาร์โค้ด',
-        cta: 'สแกน',
-        icon: scannerimage,
-        description: 'สแกนเพื่อค้นหาเครื่องจักรอย่างรวดเร็ว',
-        to: '/scanner',
-    },
+    // {
+    //     id: 'scanner',
+    //     title: 'เครื่องอ่านบาร์โค้ด',
+    //     cta: 'สแกน',
+    //     icon: scannerimage,
+    //     description: 'สแกนเพื่อค้นหาเครื่องจักรอย่างรวดเร็ว',
+    //     to: '/scanner',
+    // },
 ];

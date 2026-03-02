@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../server/auth.php';
+require_once __DIR__ . '/auth.php';
 
 const OILER_APPROVER_ROLES = ['oiler', 'oil', 'fuel', 'fueler', 'pump', 'recorder'];
 const INSPECTOR_APPROVER_ROLES = ['inspector', 'assistant'];

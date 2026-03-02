@@ -20,7 +20,99 @@ const excelKeyMap = {
     status: 'Status',
     keyword: 'Keyword',
     note: 'Note',
+    specification: 'Specification',
+    chassis_number: 'Chassis_Number',
+    chassis_no: 'Chassis_Number',
+    engine_serial_number: 'Engine_Serial_Number',
+    engine_serial: 'Engine_Serial_Number',
+    engine_model: 'Engine_Model',
+    engine_power: 'Engine_Power',
+    engine_capacity: 'Engine_Capacity',
+    engine_cap: 'Engine_Capacity',
+    tax: 'Tax',
+    insurance: 'Insurance',
+    duties: 'Duties',
+    duty: 'Duties',
+    assest_number: 'Assest_Number',
+    asset_number: 'Assest_Number',
+    manufacture: 'Manufacture',
+    manufacturer: 'Manufacture',
+    registered: 'Registered',
 };
+
+const rawExcelKeyExactMap = {
+    'รหัสเครื่องจักร': 'Equipment',
+    'รายการเครื่องจักร': 'Description',
+    'รายละเอียดเครื่องจักร': 'Specification',
+    'รายละเอียด': 'Specification',
+    'ข้อมูลจำเพาะ': 'Specification',
+    'สเปก': 'Specification',
+    'หน่วยงาน': 'Recipient',
+    'หน่วยงาน/โครงการ': 'Recipient',
+    'หน่วยงานโครงการ': 'Recipient',
+    'รหัสบริษัท': 'Company_code',
+    'บริษัท': 'Company_code',
+    'เลขทะเบียน': 'License_plate_Number',
+    'ทะเบียน': 'License_plate_Number',
+    'ทะเบียนรถ': 'License_plate_Number',
+    'หมายเลขตัวรถ': 'Chassis_Number',
+    'หมายเลขเครื่อง': 'Chassis_Number',
+    'หมายเลขแชสซี': 'Chassis_Number',
+    'หมายเลขเครื่องยนต์': 'Engine_Serial_Number',
+    'เลขเครื่องยนต์': 'Engine_Serial_Number',
+    'รุ่นเครื่องยนต์': 'Engine_Model',
+    'รุ่นเครื่องจักร': 'Engine_Model',
+    'กำลังเครื่องยนต์': 'Engine_Power',
+    'กำลังเครื่องยนต์ (แรงม้า)': 'Engine_Power',
+    'ความจุเครื่องยนต์': 'Engine_Capacity',
+    'ความจุเครื่องยนต์ (ซีซี)': 'Engine_Capacity',
+    'หมายเหตุ': 'Note',
+    'หมายเหตุ/ข้อมูลพิเศษ': 'Note',
+    'ข้อมูลพิเศษ': 'Note',
+    'สถานะ': 'Status',
+    'ภาษี': 'Tax',
+    'วันหมดอายุภาษี': 'Tax',
+    'ประกัน': 'Insurance',
+    'ประกันภัย': 'Insurance',
+    'วันหมดอายุประกัน': 'Insurance',
+    'ดิวตี้': 'Duties',
+    'อากร': 'Duties',
+    'ค่าดิวตี้': 'Duties',
+    'เลขทรัพย์สิน': 'Assest_Number',
+    'รหัสทรัพย์สิน': 'Assest_Number',
+    'บริษัทผู้ผลิต': 'Manufacture',
+    'ผู้ผลิต': 'Manufacture',
+    'วันที่จดทะเบียน': 'Registered',
+};
+
+const excelKeyExactMap = Object.fromEntries(
+    Object.entries(rawExcelKeyExactMap).map(([key, value]) => [key.toLowerCase(), value]),
+);
+
+const machineFieldKeys = [
+    'Equipment',
+    'Machine_Type',
+    'Company_code',
+    'Recipient',
+    'Description',
+    'Status',
+    'Specification',
+    'Chassis_Number',
+    'Engine_Serial_Number',
+    'Engine_Model',
+    'Engine_Power',
+    'Engine_Capacity',
+    'License_plate_Number',
+    'Tax',
+    'Insurance',
+    'Duties',
+    'Note',
+    'Class',
+    'Assest_Number',
+    'Manufacture',
+    'Keyword',
+    'Registered',
+];
 
 export default function MachinesAdmin() {
     const [items, setItems] = useState([]);
@@ -69,8 +161,6 @@ export default function MachinesAdmin() {
     const [filterType, setFilterType] = useState('');
     const [filterClass, setFilterClass] = useState('');
     const [sortOrder, setSortOrder] = useState('az');
-    const [editingId, setEditingId] = useState(null);
-    const [editingData, setEditingData] = useState({});
     const fileInputRef = useRef(null);
     const [bulkStatus, setBulkStatus] = useState('');
     const [bulkUploading, setBulkUploading] = useState(false);
@@ -114,17 +204,6 @@ export default function MachinesAdmin() {
         return out;
     }, [items, filterType, filterClass, sortOrder]);
 
-    const apiPut = async (id, body) => {
-        const res = await fetch('/api/admin/machines.php', {
-            method: 'PUT',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ Machine_Id: id, ...body }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-        return await res.json();
-    };
-
     const apiDelete = async (id) => {
         const res = await fetch(`/api/admin/machines.php?id=${encodeURIComponent(id)}`, {
             method: 'DELETE',
@@ -147,33 +226,6 @@ export default function MachinesAdmin() {
         }
     };
 
-    const handleEdit = (m) => {
-        setEditingId(m.Machine_Id);
-        setEditingData({
-            Equipment: m.Equipment || '',
-            Description: m.Description || '',
-            Class: m.Class || '',
-            License_plate_Number: m.License_plate_Number || '',
-        });
-    };
-
-    const handleSave = async () => {
-        if (!editingId) return;
-        try {
-            const res = await apiPut(editingId, editingData);
-            setItems((s) => s.map((it) => (it.Machine_Id === res.item.Machine_Id ? res.item : it)));
-            setEditingId(null);
-            setEditingData({});
-        } catch (e) {
-            alert(e.message || 'Update failed');
-        }
-    };
-
-    const handleCancel = () => {
-        setEditingId(null);
-        setEditingData({});
-    };
-
     const handleDelete = async (m) => {
         if (!confirm(`ลบเครื่อง ${m.Equipment || m.Machine_Id}?`)) return;
         try {
@@ -184,12 +236,33 @@ export default function MachinesAdmin() {
         }
     };
 
+    const normalizeSlug = (value) => value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
     const mapExcelKey = (rawKey) => {
         if (!rawKey) return null;
         const cleaned = rawKey.toString().trim();
+        if (!cleaned) return null;
         if (cleaned === 'Machine_Id') return 'Machine_Id';
-        const slug = cleaned.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-        return excelKeyMap[slug] || null;
+        const lowerCleaned = cleaned.toLowerCase();
+        if (excelKeyExactMap[lowerCleaned]) {
+            return excelKeyExactMap[lowerCleaned];
+        }
+        const slug = normalizeSlug(cleaned);
+        if (slug && excelKeyMap[slug]) {
+            return excelKeyMap[slug];
+        }
+        const stripped = cleaned.replace(/[^a-z0-9]/gi, '').toLowerCase();
+        if (!stripped) return null;
+        const fallback = machineFieldKeys.find((field) => {
+            const fieldStripped = field.replace(/[^a-z0-9]/gi, '').toLowerCase();
+            if (!fieldStripped) return false;
+            return stripped.includes(fieldStripped) || fieldStripped.includes(stripped);
+        });
+        return fallback || null;
     };
 
     const normalizeExcelRows = (rows) => {
@@ -208,12 +281,15 @@ export default function MachinesAdmin() {
                     return;
                 }
                 if (value === null || typeof value === 'undefined') {
-                    normalized[mapped] = '';
                     return;
                 }
-                normalized[mapped] = typeof value === 'number' && !Number.isNaN(value)
+                const strValue = typeof value === 'number' && !Number.isNaN(value)
                     ? String(value)
                     : String(value).trim();
+                if (strValue === '' && mapped !== 'Equipment') {
+                    return;
+                }
+                normalized[mapped] = strValue;
             });
             if (typeof normalized.Machine_Id === 'number' && normalized.Machine_Id > 0) {
                 updates.push(normalized);
@@ -477,59 +553,23 @@ export default function MachinesAdmin() {
                                     navigate(`/machines/${machine.Machine_Id}${qs}`);
                                 }}
                             >
-                                {editingId === machine.Machine_Id ? (
-                                    <>
-                                        <div style={{ flex: 1 }} onClick={(e) => e.stopPropagation()}>
-                                            <input
-                                                style={{ width: '100%', marginBottom: 6 }}
-                                                value={editingData.Equipment || ''}
-                                                onChange={(e) => setEditingData((s) => ({ ...s, Equipment: e.target.value }))}
-                                                onClick={(e) => e.stopPropagation()}
-                                            />
-                                            <input
-                                                style={{ width: '100%', marginBottom: 6 }}
-                                                value={editingData.Description || ''}
-                                                onChange={(e) => setEditingData((s) => ({ ...s, Description: e.target.value }))}
-                                                onClick={(e) => e.stopPropagation()}
-                                            />
-                                            <input
-                                                style={{ width: '48%', marginRight: '4%' }}
-                                                value={editingData.Class || ''}
-                                                onChange={(e) => setEditingData((s) => ({ ...s, Class: e.target.value }))}
-                                                onClick={(e) => e.stopPropagation()}
-                                            />
-                                            <input
-                                                style={{ width: '48%' }}
-                                                value={editingData.License_plate_Number || ''}
-                                                onChange={(e) => setEditingData((s) => ({ ...s, License_plate_Number: e.target.value }))}
-                                                onClick={(e) => e.stopPropagation()}
-                                            />
-                                        </div>
-                                        <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-                                            <button className="button primary" onClick={handleSave}>บันทึก</button>
-                                            <button className="button" onClick={handleCancel}>ยกเลิก</button>
+                                <>
+                                    <div>
+                                        <h3 style={{ margin: 0 }}>{(machine.Equipment || `#${machine.Machine_Id}`).toString()}</h3>
+                                        <p style={{ margin: 0 }}>{machine.Description || '-'}</p>
+                                        <small style={{ color: '#666' }}>
+                                            {machine.Machine_Type
+                                                ? `ประเภท: ${categoryList.find((c) => c.id === String(machine.Machine_Type))?.title || machine.Machine_Type}`
+                                                : ''}
+                                            {machine.Class ? ` · Class: ${machine.Class}` : ''}
+                                        </small>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                                        {isAdminView && (
                                             <button className="button primary" onClick={() => handleDelete(machine)}>ลบ</button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div>
-                                            <h3 style={{ margin: 0 }}>{(machine.Equipment || `#${machine.Machine_Id}`).toString()}</h3>
-                                            <p style={{ margin: 0 }}>{machine.Description || '-'}</p>
-                                            <small style={{ color: '#666' }}>
-                                                {machine.Machine_Type
-                                                    ? `ประเภท: ${categoryList.find((c) => c.id === String(machine.Machine_Type))?.title || machine.Machine_Type}`
-                                                    : ''}
-                                                {machine.Class ? ` · Class: ${machine.Class}` : ''}
-                                            </small>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-                                            {isAdminView && (
-                                                <button className="button primary" onClick={() => handleDelete(machine)}>ลบ</button>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
+                                        )}
+                                    </div>
+                                </>
                             </div>
                         </li>
                     ))}

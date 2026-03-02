@@ -1,4 +1,4 @@
--- Migration: create Report table used by php/server/reports.php
+-- Migration: create Report table used by php/api/server/reports.php
 -- Run this in your MySQL (phpMyAdmin or mysql CLI) for database `project_noncon`.
 
 CREATE TABLE IF NOT EXISTS `Report` (
