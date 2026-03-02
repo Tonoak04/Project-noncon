@@ -1,7 +1,5 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/zzpcppsz/public_html
-    - npm install
-    - npm run build
+    - export DEPLOYPATH=/home/zzpcppsz/public_html/
     - /bin/cp -R dist/* $DEPLOYPATH
