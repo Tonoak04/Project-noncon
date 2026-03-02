@@ -2,4 +2,5 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/zzpcppsz/public_html/
-    - /bin/cp -R dist/* $DEPLOYPATH
+    - /bin/rm -rf $DEPLOYPATH/*
+    - /bin/cp -R php/frontend/dist/* $DEPLOYPATH
