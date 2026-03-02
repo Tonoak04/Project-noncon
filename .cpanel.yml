@@ -4,3 +4,4 @@ deployment:
     - export DEPLOYPATH=/home/zzpcppsz/public_html/
     - /bin/rm -rf $DEPLOYPATH/*
     - /bin/cp -R php/* $DEPLOYPATH
+    - /bin/cp -R php/frontend/dist/* $DEPLOYPATH
