@@ -1,6 +1,0 @@
-[mysqld]
-local_infile=1
-secure_file_priv=/var/lib/mysql-files
-
-[client]
-local_infile=1
