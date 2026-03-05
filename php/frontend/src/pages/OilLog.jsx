@@ -1430,9 +1430,6 @@ export default function OilLog() {
                                 </ul>
                             )}
                         </div>
-                        <header>
-                            <h3 style={{color:'red'}}>ทุกอย่างต้องเป็นไปตามที่กรอกไว้ข้างต้นหากมีการดัดแปลงข้อมูลหรือข้อมูลไม่ถูกต้องอาจส่งผลต่อการพิจารณา จุ๊บๆ💓</h3>
-                        </header>
                         {error && <div className="error-row">{error}</div>}
                         {successMessage && <div className="success-row">{successMessage}</div>}
                         <button style={{fontSize: '16px'}} type="submit" className="button primary full-width" disabled={saving}>
