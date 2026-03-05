@@ -43,16 +43,25 @@ try {
         }
 
         if ($machineId === '' && $equipment === '') {
-            json_response(['error' => 'Missing Machine_Id or Equipment'], 400);
+            json_response(['error' => 'ไม่พบ Machine_Id หรือ Equipment กรุณาระบุข้อมูลให้ครบถ้วน'], 400);
             exit;
         }
 
         // Determine uploads base for machines and ensure it exists
-        $uploadsBase = realpath(__DIR__ . '/../../uploads/machines');
-        if ($uploadsBase === false) {
-            $uploadsBase = __DIR__ . '/../../uploads/machines';
-            if (!is_dir($uploadsBase)) mkdir($uploadsBase, 0755, true);
-            $uploadsBase = realpath($uploadsBase) ?: $uploadsBase;
+        $uploadsRoot = realpath(__DIR__ . '/../../uploads');
+        if ($uploadsRoot === false) {
+            $uploadsRoot = __DIR__ . '/../../uploads';
+            if (!is_dir($uploadsRoot)) mkdir($uploadsRoot, 0755, true);
+            $uploadsRoot = realpath($uploadsRoot) ?: $uploadsRoot;
+        }
+
+        $uploadsBase = $uploadsRoot . DIRECTORY_SEPARATOR . 'machines';
+        if (!is_dir($uploadsBase)) {
+            mkdir($uploadsBase, 0755, true);
+        }
+        $uploadsBaseReal = realpath($uploadsBase);
+        if ($uploadsBaseReal !== false) {
+            $uploadsBase = $uploadsBaseReal;
         }
 
         // Choose target directory. Prefer the folder that already contains image files for this vehicle
@@ -93,37 +102,81 @@ try {
             if ($targetDir !== '' && !is_dir($targetDir)) mkdir($targetDir, 0755, true);
         }
 
-        $saved = [];
-        $allowedExt = ['jpg','jpeg','png','webp','gif'];
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        $maxFileSizeBytes = 5 * 1024 * 1024;
+        $maxFileSizeMb = 5;
+        $pendingMoves = [];
+        $queueUpload = function ($tmp, $name, $size) use (&$pendingMoves, $allowedExt, $targetDir, $maxFileSizeBytes, $maxFileSizeMb) {
+            if (!$tmp || !is_uploaded_file($tmp)) {
+                return;
+            }
+            $ext = strtolower(pathinfo((string)$name, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowedExt, true)) {
+                $label = ($name !== null && $name !== '') ? $name : 'ไฟล์';
+                json_response(['error' => sprintf('ไฟล์ %s ไม่ใช่รูปภาพที่รองรับ (รองรับ: jpg, jpeg, png, webp, gif)', $label)], 422);
+                exit;
+            }
+            // ตรวจสอบ MIME type จริงจากเนื้อหาไฟล์
+            if (function_exists('finfo_open')) {
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $realMime = $finfo ? finfo_file($finfo, $tmp) : null;
+                if ($finfo) finfo_close($finfo);
+                $allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+                if ($realMime !== null && !in_array($realMime, $allowedMimes, true)) {
+                    $label = ($name !== null && $name !== '') ? $name : 'ไฟล์';
+                    json_response(['error' => sprintf('ไฟล์ %s ไม่ใช่รูปภาพจริง (ตรวจพบประเภท: %s)', $label, $realMime)], 422);
+                    exit;
+                }
+            }
+            if ($size <= 0 || $size > $maxFileSizeBytes) {
+                $label = ($name !== null && $name !== '') ? $name : 'รูปภาพ';
+                json_response(['error' => sprintf('ไฟล์ %s ต้องไม่เกิน %dMB', $label, $maxFileSizeMb)], 422);
+                exit;
+            }
+            $sanitized = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', (string)$name);
+            if ($sanitized === '' || $sanitized === null) {
+                $sanitized = 'image';
+            }
+            $final = uniqid('', true) . '_' . $sanitized;
+            $pendingMoves[] = [
+                'tmp' => $tmp,
+                'dest' => $targetDir . DIRECTORY_SEPARATOR . $final,
+            ];
+        };
+
         foreach ($_FILES as $field => $info) {
             if (is_array($info['name'])) {
                 $count = count($info['name']);
                 for ($i = 0; $i < $count; $i++) {
                     $tmp = $info['tmp_name'][$i] ?? null;
                     $name = $info['name'][$i] ?? null;
-                    if (!$tmp || !is_uploaded_file($tmp)) continue;
-                    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-                    if (!in_array($ext, $allowedExt, true)) continue;
-                    $final = uniqid('', true) . '_' . preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $name);
-                    $dest = $targetDir . DIRECTORY_SEPARATOR . $final;
-                    if (move_uploaded_file($tmp, $dest)) {
-                        $rel = str_replace('\\', '/', substr($dest, strlen(realpath(__DIR__ . '/../../uploads')) + 1));
-                        $saved[] = '/uploads/' . $rel;
-                    }
+                    $size = (int)($info['size'][$i] ?? 0);
+                    $queueUpload($tmp, $name, $size);
                 }
             } else {
                 $tmp = $info['tmp_name'] ?? null;
                 $name = $info['name'] ?? null;
-                if (!$tmp || !is_uploaded_file($tmp)) continue;
-                $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-                if (!in_array($ext, $allowedExt, true)) continue;
-                $final = uniqid('', true) . '_' . preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $name);
-                $dest = $targetDir . DIRECTORY_SEPARATOR . $final;
-                if (move_uploaded_file($tmp, $dest)) {
-                    $rel = str_replace('\\', '/', substr($dest, strlen(realpath(__DIR__ . '/../../uploads')) + 1));
-                    $saved[] = '/uploads/' . $rel;
-                }
+                $size = (int)($info['size'] ?? 0);
+                $queueUpload($tmp, $name, $size);
             }
+        }
+
+        $uploadsRootNormalized = str_replace('\\', '/', rtrim($uploadsRoot, DIRECTORY_SEPARATOR));
+        $saved = [];
+        foreach ($pendingMoves as $item) {
+            if (!move_uploaded_file($item['tmp'], $item['dest'])) {
+                continue;
+            }
+            $normalizedDest = str_replace('\\', '/', $item['dest']);
+            if (strpos($normalizedDest, $uploadsRootNormalized) === 0) {
+                $relative = ltrim(substr($normalizedDest, strlen($uploadsRootNormalized)), '/');
+            } else {
+                $relative = ltrim($normalizedDest, '/');
+            }
+            $saved[] = '/uploads/' . $relative;
         }
 
         // log chosen target and saved files for debugging
@@ -139,29 +192,38 @@ try {
         $input = json_decode($raw, true);
         $path = $input['path'] ?? null;
         if (!$path) {
-            json_response(['error' => 'Missing path'], 400);
+            json_response(['error' => 'ไม่ระบุ path ของไฟล์ที่ต้องการลบ'], 400);
             exit;
         }
         // sanitize: must start with /uploads/machines/
         $norm = preg_replace('#/+#','/', $path);
         if (strpos($norm, '/uploads/machines/') !== 0 && strpos($norm, 'uploads/machines/') !== 0) {
-            json_response(['error' => 'Invalid path'], 400);
+            json_response(['error' => 'path ไม่ถูกต้อง ต้องอยู่ใน /uploads/machines/ เท่านั้น'], 400);
             exit;
         }
         $uploadsRoot = realpath(__DIR__ . '/../../uploads');
-        $full = $uploadsRoot . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, preg_replace('#^/+#','',$norm)), DIRECTORY_SEPARATOR);
+        if ($uploadsRoot === false) {
+            $uploadsRoot = __DIR__ . '/../../uploads';
+        }
+
+        $relativePath = preg_replace('#^/+#','', $norm);
+        if (strpos($relativePath, 'uploads/') === 0) {
+            $relativePath = substr($relativePath, strlen('uploads/'));
+        }
+        $relativePath = ltrim($relativePath, '/');
+        $full = $uploadsRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (!file_exists($full) || !is_file($full)) {
-            json_response(['error' => 'File not found'], 404);
+            json_response(['error' => 'ไม่พบไฟล์ที่ต้องการลบ'], 404);
             exit;
         }
         $ok = unlink($full);
         if ($ok) json_response(['ok' => true]);
-        else json_response(['error' => 'Delete failed'], 500);
+        else json_response(['error' => 'ลบไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'], 500);
         exit;
     }
 
-    json_response(['error' => 'Method Not Allowed'], 405);
+    json_response(['error' => 'ไม่รองรับ method นี้'], 405);
 } catch (Throwable $e) {
     error_log('[admin/machines_images] ' . $e->getMessage());
-    json_response(['error' => 'Internal error'], 500);
+    json_response(['error' => 'เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่อีกครั้ง'], 500);
 }

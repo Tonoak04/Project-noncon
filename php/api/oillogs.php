@@ -7,7 +7,7 @@ require_once __DIR__ . '/auth.php';
 const OIL_CHECKLIST_OTHER_ID = 'other';
 const CHECKLIST_OTHER_NOTE_KEY = 'other_note';
 const OILLOG_MAX_ATTACHMENTS = 5;
-const OILLOG_MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
+const OILLOG_MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
 const OILLOG_ALLOWED_ATTACHMENT_MIME = [
     'image/jpeg',
     'image/pjpeg',

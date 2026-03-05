@@ -18,7 +18,7 @@ import oil from '../images/oil.jpg';
 
 
 const MAX_PHOTO_ATTACHMENTS = 5;
-const MAX_PHOTO_SIZE_MB = 8;
+const MAX_PHOTO_SIZE_MB = 5;
 const MAX_PHOTO_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
 const operatorRoleKeys = ['operator', 'driver'];
 const BASE_PUMP_LOCATION_OPTIONS = ['ปั้มในบริษัท'];

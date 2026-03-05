@@ -14,6 +14,7 @@ export default function Reports() {
     const [showDialog, setShowDialog] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
     const [highlightIndex, setHighlightIndex] = useState(0);
+    const [attachmentError, setAttachmentError] = useState('');
     const navigate = useNavigate();
     const [machines, setMachines] = useState([]);
     useEffect(() => {
@@ -76,14 +77,31 @@ export default function Reports() {
         }
     };
 
+    const MAX_FILE_SIZE_MB = 5;
+    const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+    const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
     const handleFileChange = (event) => {
         const files = Array.from(event.target.files ?? []);
-        if (files.length === 0) {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (files.length === 0) return;
+
+        const invalidType = files.find(f => !ALLOWED_MIME.includes(f.type));
+        if (invalidType) {
+            setAttachmentError(`ไฟล์ "${invalidType.name}" ไม่ใช่รูปภาพที่รองรับ (รองรับ: jpg, png, webp, gif)`);
             return;
         }
+        const oversized = files.find(f => f.size > MAX_FILE_SIZE_BYTES);
+        if (oversized) {
+            setAttachmentError(`ไฟล์ "${oversized.name}" มีขนาดเกิน ${MAX_FILE_SIZE_MB}MB กรุณาเลือกไฟล์ที่เล็กกว่านี้`);
+            return;
+        }
+
+        setAttachmentError('');
         setAttachments((prev) => {
             const remaining = MAX_ATTACHMENTS - prev.length;
             if (remaining <= 0) {
+                setAttachmentError(`แนบรูปได้สูงสุด ${MAX_ATTACHMENTS} รูปเท่านั้น`);
                 return prev;
             }
             const nextBatch = files.slice(0, remaining).map((file) => ({
@@ -92,9 +110,6 @@ export default function Reports() {
             }));
             return [...prev, ...nextBatch];
         });
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
     };
 
     const handleRemoveAttachment = (index) => {
@@ -251,11 +266,14 @@ export default function Reports() {
                     <input
                         id="report-photo"
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
                         multiple
                         ref={fileInputRef}
                         onChange={handleFileChange}
                     />
+                    {attachmentError && (
+                        <div style={{ color: '#dc3545', fontSize: '13px', marginTop: '4px' }}>{attachmentError}</div>
+                    )}
                     {attachments.length > 0 && (
                         <div className="attachment-preview">
                             {attachments.map((item, index) => (

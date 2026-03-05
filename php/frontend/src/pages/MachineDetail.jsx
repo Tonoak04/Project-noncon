@@ -328,6 +328,20 @@ export default function MachineDetail() {
             if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+        const invalidType = Array.from(files).find(f => !ALLOWED_TYPES.includes(f.type));
+        if (invalidType) {
+            alert(`ไฟล์ "${invalidType.name}" ไม่ใช่รูปภาพที่รองรับ (รองรับ: jpg, png, webp, gif เท่านั้น)`);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+        const oversized = Array.from(files).find(f => f.size > MAX_SIZE_BYTES);
+        if (oversized) {
+            alert(`ไฟล์ "${oversized.name}" มีขนาดเกิน 5MB`);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
         const allowedFiles = Array.from(files).slice(0, remainingSlots);
         if (allowedFiles.length === 0) {
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -529,7 +543,7 @@ export default function MachineDetail() {
                     <div style={{ marginTop: 16 }}>
                         <h3>จัดการรูปภาพ (Admin)</h3>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                            <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFilesSelected} />
+                            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style={{ display: 'none' }} onChange={handleFilesSelected} />
                             <button className="button" type="button" onClick={handleChooseFiles} disabled={uploading}>{uploading ? 'กำลังอัพโหลด...' : 'อัปโหลดรูป'}</button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

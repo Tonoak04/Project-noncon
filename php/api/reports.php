@@ -8,6 +8,9 @@ ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 
+const REPORT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const REPORT_MAX_FILE_SIZE_MB = 5;
+
 $logDir = realpath(__DIR__ . '/../logs') ?: (__DIR__ . '/../logs');
 if (!is_dir($logDir)) {
     @mkdir($logDir, 0755, true);
@@ -38,7 +41,7 @@ function handle_post(): void
         $status = trim((string)($_POST['Status'] ?? 'new')) ?: 'new';
 
         if ($details === '') {
-            respond_json(['status' => 'error', 'message' => 'Details required'], 400);
+            respond_json(['status' => 'error', 'message' => 'กรุณากรอกรายละเอียดของรายงาน'], 400);
             return;
         }
 
@@ -61,7 +64,14 @@ function handle_post(): void
                 $size = (int)($files['size'][$i] ?? 0);
                 $type = (string)($files['type'][$i] ?? '');
 
-                if ($size <= 0 || $size > 5 * 1024 * 1024) continue; // skip >5MB
+                if ($size <= 0) continue;
+                if ($size > REPORT_MAX_FILE_SIZE_BYTES) {
+                    respond_json([
+                        'status' => 'error',
+                        'message' => sprintf('ไฟล์ %s ต้องไม่เกิน %dMB', $orig !== '' ? $orig : 'ที่อัปโหลด', REPORT_MAX_FILE_SIZE_MB),
+                    ], 422);
+                    return;
+                }
                 $allowed = ['image/jpeg','image/png','image/gif','image/webp'];
                 if ($type !== '' && !in_array($type, $allowed, true)) continue;
 
@@ -135,7 +145,7 @@ function handle_request(): void
             $stmt->execute([$id]);
             $row = $stmt->fetch();
             if (!$row) {
-                respond_json(['status' => 'error', 'message' => 'Not found'], 404);
+                respond_json(['status' => 'error', 'message' => 'ไม่พบข้อมูลรายงานที่ต้องการ'], 404);
                 return;
             }
             // Photo is no longer stored in DB; return empty photos array.
@@ -168,7 +178,7 @@ if (php_sapi_name() !== 'cli') {
             handle_post();
             exit;
         }
-        respond_json(['error' => 'Method not allowed'], 405);
+        respond_json(['error' => 'ไม่รองรับ method นี้'], 405);
         exit;
     }
 
@@ -177,10 +187,10 @@ if (php_sapi_name() !== 'cli') {
             if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 handle_post();
             } else {
-                respond_json(['error' => 'Method not allowed'], 405);
+                respond_json(['error' => 'ไม่รองรับ method นี้'], 405);
             }
         } else {
-            respond_json(['error' => 'Not Found'], 404);
+            respond_json(['error' => 'ไม่พบ endpoint ที่ร้องขอ'], 404);
         }
         exit;
     }
