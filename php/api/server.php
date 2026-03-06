@@ -8,9 +8,9 @@ function db_config(): array
 {
     return [
         'host' => getenv('DB_HOST') ?: '127.0.0.1',
-        'database' => getenv('DB_DATABASE') ?: 'project_noncon', //zzpcppsz_project_noncon
-        'username' => getenv('DB_USERNAME') ?: 'root', //zzpcppsz_project
-        'password' => getenv('DB_PASSWORD') ?: 'rootpassword', //JSs9Ph=pUn;~VNx=
+        'database' => getenv('DB_DATABASE') ?: 'zzpcppsz_project_noncon', //zzpcppsz_project_noncon
+        'username' => getenv('DB_USERNAME') ?: 'zzpcppsz_project', //zzpcppsz_project
+        'password' => getenv('DB_PASSWORD') ?: 'JSs9Ph=pUn;~VNx=', //JSs9Ph=pUn;~VNx=
         'charset' => 'utf8mb4', 
     ];
 }

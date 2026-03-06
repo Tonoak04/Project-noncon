@@ -1002,6 +1002,11 @@ export default function OilLog() {
         const derivedFuelType = fuelDetailsPayload.length === 1
             ? `${fuelDetailsPayload[0].label}${fuelDetailsPayload[0].code ? ` #${fuelDetailsPayload[0].code}` : ''}`
             : 'หลายประเภท';
+        const isKnownSimpleFuel = fuelDetailsPayload.length === 1
+            && !fuelDetailsPayload[0].code
+            && ['น้ำมันเครื่อง', 'น้ำมันไฮดรอลิค'].includes(fuelDetailsPayload[0].label);
+        const fuelTypeValue = isKnownSimpleFuel ? fuelDetailsPayload[0].label : 'อื่นๆ';
+        const customFuelTypeValue = isKnownSimpleFuel ? '' : derivedFuelType;
         const timeTotalsPayload = {
             timeMorningTotal: clockStringToDecimalHours(adjustedForm.timeMorningTotal),
             timeAfternoonTotal: clockStringToDecimalHours(adjustedForm.timeAfternoonTotal),
@@ -1010,9 +1015,9 @@ export default function OilLog() {
         const submissionPayload = {
             ...adjustedForm,
             ...timeTotalsPayload,
-            fuelType: derivedFuelType,
+            fuelType: fuelTypeValue,
             fuelAmountLiters: Number(totalFuelLiters.toFixed(2)),
-            customFuelType: '',
+            customFuelType: customFuelTypeValue,
             fuelDetails: fuelDetailsPayload,
         };
         const multipartPayload = new FormData();
@@ -1294,10 +1299,10 @@ export default function OilLog() {
                             <strong>{formattedFuelTotal} ลิตร</strong>
                         </div>
                         <div className="grid two-cols">
-                            <label>
+                            {/* <label>
                                 เลขที่ใบจ่ายน้ำมัน
                                 <input type="text" value={form.fuelTicketNo} onChange={handleChange('fuelTicketNo')} />
-                            </label>
+                            </label> */}
                             <label>
                                 เวลาเติม (ถ้ามี)
                                 <input type="time" value={form.fuelTime} onChange={handleChange('fuelTime')} />
