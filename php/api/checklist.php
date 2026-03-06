@@ -113,7 +113,7 @@ function normalize_department_key(?string $department): string
 function get_daily_form(PDO $pdo, int $machineId, int $year, int $month, ?string $department = null): ?array
 {
     $departmentKey = normalize_department_key($department);
-    $baseSql = 'SELECT DailyForm_Id, Machine_Id, Center_Id, Form_Month, Form_Year, Unit_Work FROM DailyForm WHERE Machine_Id = ? AND Form_Year = ? AND Form_Month = ?';
+    $baseSql = 'SELECT DailyForm_Id, Machine_Id, Center_Id, Form_Month, Form_Year, Unit_Work, Problem_Description FROM DailyForm WHERE Machine_Id = ? AND Form_Year = ? AND Form_Month = ?';
     $params = [$machineId, $year, $month];
 
     $queries = [];
@@ -134,6 +134,20 @@ function get_daily_form(PDO $pdo, int $machineId, int $year, int $month, ?string
     }
 
     return null;
+}
+
+function get_daily_form_any_department(PDO $pdo, int $machineId, int $year, int $month): ?array
+{
+    $stmt = $pdo->prepare(
+        'SELECT DailyForm_Id, Machine_Id, Center_Id, Form_Month, Form_Year, Unit_Work, Problem_Description
+        FROM DailyForm
+        WHERE Machine_Id = ? AND Form_Year = ? AND Form_Month = ?
+        ORDER BY Updated_at DESC, DailyForm_Id DESC
+        LIMIT 1'
+    );
+    $stmt->execute([$machineId, $year, $month]);
+    $row = $stmt->fetch();
+    return $row ?: null;
 }
 
 function ensure_daily_form(PDO $pdo, int $machineId, int $centerId, int $year, int $month, ?string $department = null): int
@@ -316,6 +330,9 @@ function handle_checklist_get(array $user): void
     }
 
     $form = get_daily_form($pdo, (int)$machine['Machine_Id'], $period['year'], $period['month'], $departmentName);
+    if (!$form && user_has_role($user, 'admin')) {
+        $form = get_daily_form_any_department($pdo, (int)$machine['Machine_Id'], $period['year'], $period['month']);
+    }
     $driverValues = [];
     $foremanValues = [];
     $itemMatrix = [];

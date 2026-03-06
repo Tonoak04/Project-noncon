@@ -511,7 +511,24 @@ export default function Checklist() {
             return;
         }
 
+        const dayHasChecklistValues = (dayKey) => {
+            const dayValues = checklistValues[String(dayKey)] || {};
+            return Object.values(dayValues).some((value) => String(value).trim() !== '');
+        };
+
         if (isDriver) {
+            const pendingChecklistDays = Array.from(pendingChecklistCells)
+                .map((key) => Number(key.split(':')[0]))
+                .filter((day) => day >= 1 && day <= 31);
+            if (pendingChecklistDays.length > 0) {
+                const missingSignatureDays = pendingChecklistDays.filter((day) => (
+                    !(driverSignatures[String(day)] || driverLockedDays.has(day))
+                ));
+                if (missingSignatureDays.length > 0) {
+                    alert(`กรุณาลงลายเซ็นพขร. ในวันที่มีการตรวจ: ${missingSignatureDays.join(', ')}`);
+                    return;
+                }
+            }
             if (!hasPendingDriverSignatures && !hasPendingDriverStatuses && !hasIssueNotesChange) {
                 alert('ยังไม่มีข้อมูลใหม่สำหรับบันทึก');
                 return;
@@ -635,6 +652,19 @@ export default function Checklist() {
         if (!hasPendingForemanSignatures) {
             alert('ยังไม่มีลายเซ็นใหม่สำหรับบันทึก');
             return;
+        }
+
+        const checklistDays = Object.keys(checklistValues)
+            .map((key) => Number(key))
+            .filter((day) => day >= 1 && day <= 31 && dayHasChecklistValues(day));
+        if (checklistDays.length > 0) {
+            const missingForemanDays = checklistDays.filter((day) => (
+                !(foremanSignatures[String(day)] || foremanLockedDays.has(day))
+            ));
+            if (missingForemanDays.length > 0) {
+                alert(`กรุณาลงลายเซ็นโฟร์แมน ในวันที่มีการตรวจ: ${missingForemanDays.join(', ')}`);
+                return;
+            }
         }
 
         const pendingDays = Array.from(pendingForemanDays).sort((a, b) => a - b);
@@ -812,7 +842,9 @@ export default function Checklist() {
                             <textarea
                                 id="issue-notes"
                                 rows="4"
-                                placeholder="กรอกรายละเอียดปัญหาที่พบระหว่างการตรวจเช็ก"
+                                placeholder="กรอกรายละเอียดปัญหาที่พบระหว่างการตรวจเช็ก 
+วันที่1 : สตาร์ทเครื่องไม่ติด 
+วันที่6 : น้ำมันเครื่องรั่ว"
                                 value={issueNotes}
                                 disabled={!isMetaComplete || !isPeriodEditable || isForeman || isOnlyView}
                                 onChange={(event) => setIssueNotes(event.target.value)}

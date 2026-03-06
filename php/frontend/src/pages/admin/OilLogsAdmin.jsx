@@ -1,9 +1,20 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../api.js';
-import { oilChecklistItems, oilTimeSegments, checklistOtherNoteKey, oilChecklistOtherId } from '../../data/oilLog.js';
+import {
+    oilChecklistItems,
+    oilTimeSegments,
+    checklistOtherNoteKey,
+    oilChecklistOtherId,
+    fuelCategories,
+} from '../../data/oilLog.js';
 
 const limits = [50, 100, 200, 400];
+
+const normalizeFuelTypeLabel = (value) => {
+    if (!value) return '';
+    return String(value).split('#')[0].trim();
+};
 
 const numberFormat = (value) => {
     if (value === null || typeof value === 'undefined') return '-';
@@ -100,6 +111,22 @@ export default function OilLogsAdmin() {
     const [latestError, setLatestError] = useState('');
     const unauthorizedTimerRef = useRef(null);
 
+    const baseFuelLabels = useMemo(() => (
+        fuelCategories.map((category) => category?.label).filter(Boolean)
+    ), []);
+
+    const fuelTypeOptions = useMemo(() => {
+        const options = new Set(['ทั้งหมด']);
+        baseFuelLabels.forEach((label) => options.add(label));
+        [...items, ...latestItems].forEach((row) => {
+            const normalized = normalizeFuelTypeLabel(row?.Fuel_Type || '');
+            if (normalized) {
+                options.add(normalized);
+            }
+        });
+        return Array.from(options);
+    }, [baseFuelLabels, items, latestItems]);
+
     const timeDetails = useMemo(() => {
         if (!selected) return [];
         return oilTimeSegments.map((segment) => {
@@ -160,7 +187,9 @@ export default function OilLogsAdmin() {
         if (params.from) searchParams.set('from', params.from);
         if (params.to) searchParams.set('to', params.to);
         if (params.search) searchParams.set('search', params.search);
-        if (params.fuelType && params.fuelType !== 'ทั้งหมด') searchParams.set('fuelType', params.fuelType);
+        if (params.fuelType && params.fuelType !== 'ทั้งหมด' && !baseFuelLabels.includes(params.fuelType)) {
+            searchParams.set('fuelType', params.fuelType);
+        }
         return searchParams.toString();
     };
     const fetchData = async (params) => {
@@ -225,8 +254,40 @@ export default function OilLogsAdmin() {
         setQuery({ ...filters });
     };
 
+    const isBaseFuelFilter = baseFuelLabels.includes(query.fuelType);
+
+    const filteredItems = useMemo(() => {
+        if (!isBaseFuelFilter) {
+            return items;
+        }
+        return items.filter((row) => (
+            normalizeFuelTypeLabel(row?.Fuel_Type || '') === query.fuelType
+        ));
+    }, [items, isBaseFuelFilter, query.fuelType]);
+
+    const filteredSummary = useMemo(() => {
+        if (!isBaseFuelFilter) {
+            return summary;
+        }
+        const totalLiters = filteredItems.reduce((sum, row) => (
+            sum + Number(row?.Fuel_Amount_Liters || 0)
+        ), 0);
+        return {
+            count: filteredItems.length,
+            total_liters: Number(totalLiters.toFixed(2)),
+        };
+    }, [filteredItems, isBaseFuelFilter, summary]);
+
+    useEffect(() => {
+        if (!selected) return;
+        const stillVisible = filteredItems.some((row) => row.OilLog_Id === selected.OilLog_Id);
+        if (!stillVisible) {
+            setSelected(null);
+        }
+    }, [filteredItems, selected]);
+
     const exportCsv = () => {
-        if (!items.length) return;
+        if (!filteredItems.length) return;
 
         const excludedKeys = new Set([
             'OilLog_Id', 
@@ -306,7 +367,7 @@ export default function OilLogsAdmin() {
         };
 
         const discovered = new Set();
-        items.forEach((row) => {
+        filteredItems.forEach((row) => {
             Object.keys(row || {}).forEach((key) => {
                 if (!excludedKeys.has(key)) {
                     discovered.add(key);
@@ -332,7 +393,7 @@ export default function OilLogsAdmin() {
             return String(value);
         };
 
-        const csvRows = [headerLabels, ...items.map((row) => headerKeys.map((key) => formatCell(row[key])))]
+        const csvRows = [headerLabels, ...filteredItems.map((row) => headerKeys.map((key) => formatCell(row[key])))]
             .map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(','))
             .join('\n');
 
@@ -503,9 +564,17 @@ export default function OilLogsAdmin() {
                         ถึงวันที่
                         <input type="date" value={filters.to} onChange={handleFilterChange('to')} />
                     </label>
-                    <label>
+                    {/* <label>
                         คำค้นหา
                         <input type="text" value={filters.search} onChange={handleFilterChange('search')} placeholder="เครื่อง, โครงการ, ใบจ่าย, ผู้ปฏิบัติงาน" />
+                    </label> */}
+                    <label>
+                        ประเภทน้ำมัน
+                        <select value={filters.fuelType} onChange={handleFilterChange('fuelType')}>
+                            {fuelTypeOptions.map((fuelType) => (
+                                <option key={fuelType} value={fuelType}>{fuelType}</option>
+                            ))}
+                        </select>
                     </label>
                     <label>
                         จำนวนที่แสดง
@@ -526,12 +595,12 @@ export default function OilLogsAdmin() {
                 <div className="summary-grid">
                     <div className="summary-card">
                         <h3>จำนวนรายการ</h3>
-                        <strong>{summary.count || 0} รายการ</strong>
+                        <strong>{filteredSummary.count || 0} รายการ</strong>
                         <span>ตามตัวกรองล่าสุด</span>
                     </div>
                     <div className="summary-card">
                         <h3>รวมปริมาณ</h3>
-                        <strong>{numberFormat(summary.total_liters || 0)} ลิตร</strong>
+                        <strong>{numberFormat(filteredSummary.total_liters || 0)} ลิตร</strong>
                         <span>เฉพาะข้อมูลที่แสดง</span>
                     </div>
                 </div>
@@ -539,7 +608,7 @@ export default function OilLogsAdmin() {
                 <div className="admin-oil-layout">
                     <div className="table-card">
                         <div className="table-head">
-                            <h3>รายการบันทึก ({items.length})</h3>
+                            <h3>รายการบันทึก ({filteredItems.length})</h3>
                             {loading && <span className="text-muted">กำลังโหลด…</span>}
                         </div>
                         <div className="table-scroll">
@@ -554,12 +623,12 @@ export default function OilLogsAdmin() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {!items.length && !loading && (
+                                    {!filteredItems.length && !loading && (
                                         <tr>
                                             <td colSpan="8" className="empty-row">ไม่พบข้อมูลตรงตามตัวกรอง</td>
                                         </tr>
                                     )}
-                                    {items.map((row) => (
+                                    {filteredItems.map((row) => (
                                         <tr
                                             key={row.OilLog_Id}
                                             className={selected && selected.OilLog_Id === row.OilLog_Id ? 'is-selected' : ''}
