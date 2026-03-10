@@ -48,6 +48,7 @@ export default function Checklist() {
     const [checklistValues, setChecklistValues] = useState({});
     const [lockedChecklistCells, setLockedChecklistCells] = useState(() => new Set());
     const [pendingChecklistCells, setPendingChecklistCells] = useState(() => new Set());
+    const [lockedDays, setLockedDays] = useState(() => new Set());
     
     const currentPeriod = useMemo(() => {
         const now = new Date();
@@ -118,6 +119,7 @@ export default function Checklist() {
         setForemanSignatureLabels({});
         setForemanLockedDays(new Set());
         setPendingForemanDays(new Set());
+        setLockedDays(new Set());
     }, []);
 
     const clearDriverState = useCallback(() => {
@@ -130,6 +132,28 @@ export default function Checklist() {
         setPendingChecklistCells(new Set());
         setIssueNotes('');
         setSavedIssueNotes('');
+        setLockedDays(new Set());
+    }, []);
+
+    const buildLockedDays = useCallback((driverValuesMap, foremanValuesMap, itemsMatrix) => {
+        const daySet = new Set();
+        Object.entries(driverValuesMap || {}).forEach(([day, value]) => {
+            if (value) {
+                daySet.add(Number(day));
+            }
+        });
+        Object.entries(foremanValuesMap || {}).forEach(([day, value]) => {
+            if (value) {
+                daySet.add(Number(day));
+            }
+        });
+        Object.entries(itemsMatrix || {}).forEach(([day, items]) => {
+            const hasValue = Object.values(items || {}).some((value) => String(value || '').trim() !== '');
+            if (hasValue) {
+                daySet.add(Number(day));
+            }
+        });
+        return daySet;
     }, []);
 
     useEffect(() => {
@@ -254,18 +278,19 @@ export default function Checklist() {
                 }
                 setDriverSignatures(driverValuesResolved);
                 setDriverSignatureLabels(driverDataset.labels);
-                setDriverLockedDays(isPeriodEditable ? new Set() : driverLockedInitial);
+                setDriverLockedDays(driverLockedInitial);
                 setPendingDriverSignatureDays(new Set());
                 const foremanDataset = mapSignatureValues(data.foreman?.values);
                 const foremanLockedInitial = createDaySet(data.foreman?.lockedDays);
                 setForemanSignatures(foremanDataset.values);
                 setForemanSignatureLabels(foremanDataset.labels);
-                setForemanLockedDays(isPeriodEditable ? new Set() : foremanLockedInitial);
+                setForemanLockedDays(foremanLockedInitial);
                 setPendingForemanDays(new Set());
                 const normalizedItems = normalizeChecklistMatrix(data.items?.values);
                 setChecklistValues(normalizedItems);
-                setLockedChecklistCells(isPeriodEditable ? new Set() : buildChecklistLocks(normalizedItems));
+                setLockedChecklistCells(buildChecklistLocks(normalizedItems));
                 setPendingChecklistCells(new Set());
+                setLockedDays(buildLockedDays(driverDataset.values, foremanDataset.values, normalizedItems));
             } catch (error) {
                 if (!ignore) {
                     if (error?.status === 401) {
@@ -399,6 +424,7 @@ export default function Checklist() {
         const dayKey = String(day);
         const value = foremanSignatures[dayKey] ?? '';
         const isLocked = foremanLockedDays.has(day);
+        const isColumnLocked = lockedDays.has(day);
 
         if (item.signatureRole === 'foreman') {
             if (!isForeman) {
@@ -417,7 +443,7 @@ export default function Checklist() {
                 <select
                     className="signature-grid-input"
                     value={value}
-                    disabled={!isMetaComplete || !isPeriodEditable || isLocked || checklistLoading || foremanOptions.length === 0}
+                    disabled={!isMetaComplete || !isPeriodEditable || isLocked || isColumnLocked || checklistLoading || foremanOptions.length === 0}
                     onChange={(event) => {
                         const nextValue = event.target.value;
                         setForemanSignatures((prev) => ({ ...prev, [dayKey]: nextValue }));
@@ -441,7 +467,7 @@ export default function Checklist() {
         if (item.signatureRole === 'driver') {
             const driverValue = driverSignatures[dayKey] ?? '';
             const driverLocked = driverLockedDays.has(day);
-            if (driverLocked || isForeman || isOnlyView) {
+            if (driverLocked || isForeman || isOnlyView || lockedDays.has(day)) {
                 const displayValue = resolveSignatureDisplay(driverValue, driverOptions, driverSignatureLabels[dayKey]);
                 return (
                     <input
@@ -457,7 +483,7 @@ export default function Checklist() {
                 <select
                     className="signature-grid-input"
                     value={driverValue}
-                    disabled={!isMetaComplete || !isPeriodEditable || checklistLoading || driverOptions.length === 0 || isOnlyView}
+                    disabled={!isMetaComplete || !isPeriodEditable || checklistLoading || driverOptions.length === 0 || isOnlyView || lockedDays.has(day)}
                     onChange={(event) => {
                         const nextValue = event.target.value;
                         setDriverSignatures((prev) => ({ ...prev, [dayKey]: nextValue }));
@@ -483,7 +509,7 @@ export default function Checklist() {
     const handleStatusChange = (day, order, nextValue) => {
         const dayKey = String(day);
         const key = `${dayKey}:${order}`;
-        if (lockedChecklistCells.has(key) || !isPeriodEditable) {
+        if (lockedChecklistCells.has(key) || !isPeriodEditable || lockedDays.has(day)) {
             return;
         }
         setChecklistValues((prev) => {
@@ -586,15 +612,16 @@ export default function Checklist() {
                 const response = await apiPost('/api/checklist.php', payload);
                 if (hasPendingDriverSignatures) {
                     const lockedDays = Array.isArray(response.lockedDays) ? response.lockedDays : pendingSignatureDays;
-                    if (!isPeriodEditable) {
-                        setDriverLockedDays((prev) => {
-                            const next = new Set(prev);
-                            lockedDays.forEach((day) => next.add(Number(day)));
-                            return next;
-                        });
-                    } else {
-                        setDriverLockedDays(new Set());
-                    }
+                    setDriverLockedDays((prev) => {
+                        const next = new Set(prev);
+                        lockedDays.forEach((day) => next.add(Number(day)));
+                        return next;
+                    });
+                    setLockedDays((prev) => {
+                        const next = new Set(prev);
+                        lockedDays.forEach((day) => next.add(Number(day)));
+                        return next;
+                    });
                     setPendingDriverSignatureDays(new Set());
                 }
                 if (hasPendingDriverStatuses) {
@@ -619,17 +646,20 @@ export default function Checklist() {
                             });
                             return next;
                         });
-                        if (!isPeriodEditable) {
-                            setLockedChecklistCells((prev) => {
-                                const next = new Set(prev);
-                                fallbackItems.forEach((item) => {
-                                    next.add(`${String(item.day)}:${Number(item.order)}`);
-                                });
-                                return next;
+                        setLockedChecklistCells((prev) => {
+                            const next = new Set(prev);
+                            fallbackItems.forEach((item) => {
+                                next.add(`${String(item.day)}:${Number(item.order)}`);
                             });
-                        } else {
-                            setLockedChecklistCells(new Set());
-                        }
+                            return next;
+                        });
+                        setLockedDays((prev) => {
+                            const next = new Set(prev);
+                            fallbackItems.forEach((item) => {
+                                next.add(Number(item.day));
+                            });
+                            return next;
+                        });
                     }
                     setPendingChecklistCells(new Set());
                 }
@@ -688,15 +718,16 @@ export default function Checklist() {
         try {
             const response = await apiPost('/api/checklist.php', payload);
             const lockedDays = Array.isArray(response.lockedDays) ? response.lockedDays : pendingDays;
-            if (!isPeriodEditable) {
-                setForemanLockedDays((prev) => {
-                    const next = new Set(prev);
-                    lockedDays.forEach((day) => next.add(Number(day)));
-                    return next;
-                });
-            } else {
-                setForemanLockedDays(new Set());
-            }
+            setForemanLockedDays((prev) => {
+                const next = new Set(prev);
+                lockedDays.forEach((day) => next.add(Number(day)));
+                return next;
+            });
+            setLockedDays((prev) => {
+                const next = new Set(prev);
+                lockedDays.forEach((day) => next.add(Number(day)));
+                return next;
+            });
             setPendingForemanDays(new Set());
             setStatus('saved');
             setTimeout(() => setStatus('idle'), 1500);
@@ -804,7 +835,7 @@ export default function Checklist() {
                                                         className="status-select"
                                                         value={checklistValues[String(day)]?.[item.order] ?? ''}
                                                         aria-label={`เลือกสถานะ ข้อ ${item.order} วันที่ ${day}`}
-                                                        disabled={!isMetaComplete || !isPeriodEditable || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isOnlyView}
+                                                        disabled={!isMetaComplete || !isPeriodEditable || isForeman || lockedChecklistCells.has(`${String(day)}:${item.order}`) || checklistLoading || isOnlyView || lockedDays.has(day)}
                                                         onChange={(event) => handleStatusChange(day, item.order, event.target.value)}
                                                     >
                                                         {STATUS_OPTIONS.map((option) => (

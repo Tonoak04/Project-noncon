@@ -7,8 +7,10 @@ import {
     oilTimeSegments,
     createChecklistState,
     oilChecklistOtherId,
-    fuelCategories,
-    createFuelDetailsState,
+    fuelOptions,
+    lubricantOptions,
+    lubricantGradeOptions,
+    createFuelSelectionsState,
 } from '../data/oilLog.js';
 import { BASE_DEPARTMENT_OPTIONS } from './checklistShared.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -354,7 +356,7 @@ const createDefaultForm = (overrides = {}) => {
         notes: '',
         checklist: createChecklistState(),
         checklistOtherNote: '',
-        fuelDetails: createFuelDetailsState(),
+        fuelSelections: createFuelSelectionsState(),
         ...normalizedOverrides,
     };
 };
@@ -392,6 +394,12 @@ export default function OilLog() {
     const photoInputRef = useRef(null);
     const approvalWatcherRef = useRef(null);
     const approvalCompletionHandledRef = useRef(false);
+
+    const resolveOptionLabel = (options, id) => {
+        if (!id) return '';
+        const match = options.find((option) => option.id === id);
+        return match ? match.label : id;
+    };
 
     const buildApprovalUrl = (path = '') => {
         if (!path) {
@@ -667,25 +675,42 @@ export default function OilLog() {
     }, [user?.Center_Id, canAutoFillOperator]);
 
     const activeFuelItems = useMemo(() => {
-        return fuelCategories
-            .map((category) => {
-                const entry = form.fuelDetails[category.id] || {};
-                if (!entry.enabled) {
-                    return null;
-                }
-                const liters = parseFloat(entry.liters);
-                if (Number.isNaN(liters) || liters <= 0) {
+        const selections = form.fuelSelections || createFuelSelectionsState();
+        const fuelRows = selections.fuels || [];
+        const lubeRows = selections.lubes || [];
+        const fuels = fuelRows
+            .map((row, index) => {
+                const type = (row.type || '').trim();
+                const liters = parseFloat(row.liters);
+                if (!type || Number.isNaN(liters) || liters <= 0) {
                     return null;
                 }
                 return {
-                    id: category.id,
-                    label: category.label,
-                    code: (entry.code || '').trim(),
+                    id: `fuel-${index}-${type}`,
+                    label: resolveOptionLabel(fuelOptions, type),
+                    code: '',
                     liters,
                 };
             })
             .filter(Boolean);
-    }, [form.fuelDetails]);
+        const lubes = lubeRows
+            .map((row, index) => {
+                const type = (row.type || '').trim();
+                const grade = (row.grade || '').trim();
+                const liters = parseFloat(row.liters);
+                if (!type || !grade || Number.isNaN(liters) || liters <= 0) {
+                    return null;
+                }
+                return {
+                    id: `lube-${index}-${type}`,
+                    label: resolveOptionLabel(lubricantOptions, type),
+                    code: grade,
+                    liters,
+                };
+            })
+            .filter(Boolean);
+        return [...fuels, ...lubes];
+    }, [form.fuelSelections]);
 
     const totalFuelLiters = useMemo(() => {
         return activeFuelItems.reduce((sum, item) => sum + item.liters, 0);
@@ -798,37 +823,90 @@ export default function OilLog() {
         });
     };
 
-    const handleFuelToggle = (categoryId) => (event) => {
-        const enabled = event.target.checked;
+    const handleFuelRowChange = (group, index, field) => (event) => {
+        const value = event.target.value;
         setForm((prev) => {
-            const nextDetails = {
-                ...prev.fuelDetails,
-                [categoryId]: {
-                    ...(prev.fuelDetails[categoryId] || {}),
-                    enabled,
-                    liters: enabled ? prev.fuelDetails[categoryId]?.liters || '' : '',
-                    code: enabled ? prev.fuelDetails[categoryId]?.code || '' : '',
-                },
-            };
+            const selections = prev.fuelSelections || createFuelSelectionsState();
+            const nextGroup = [...(selections[group] || [])];
+            nextGroup[index] = { ...(nextGroup[index] || {}), [field]: value };
             return {
                 ...prev,
-                fuelDetails: nextDetails,
+                fuelSelections: {
+                    ...selections,
+                    [group]: nextGroup,
+                },
             };
         });
     };
 
-    const handleFuelDetailChange = (categoryId, field) => (event) => {
-        const value = event.target.value;
-        setForm((prev) => ({
-            ...prev,
-            fuelDetails: {
-                ...prev.fuelDetails,
-                [categoryId]: {
-                    ...(prev.fuelDetails[categoryId] || {}),
-                    [field]: value,
+    const handleAddFuelRow = (group) => {
+        setForm((prev) => {
+            const selections = prev.fuelSelections || createFuelSelectionsState();
+            const nextGroup = [...(selections[group] || [])];
+            if (group === 'fuels') {
+                nextGroup.push({ type: '', liters: '' });
+            } else {
+                nextGroup.push({ type: '', grade: '', liters: '' });
+            }
+            return {
+                ...prev,
+                fuelSelections: {
+                    ...selections,
+                    [group]: nextGroup,
                 },
-            },
-        }));
+            };
+        });
+    };
+
+    const handleRemoveFuelRow = (group, index) => {
+        setForm((prev) => {
+            const selections = prev.fuelSelections || createFuelSelectionsState();
+            const existing = selections[group] || [];
+            const nextGroup = existing.filter((_, rowIndex) => rowIndex !== index);
+            if (!nextGroup.length) {
+                if (group === 'fuels') {
+                    nextGroup.push({ type: '', liters: '' });
+                } else {
+                    nextGroup.push({ type: '', grade: '', liters: '' });
+                }
+            }
+            return {
+                ...prev,
+                fuelSelections: {
+                    ...selections,
+                    [group]: nextGroup,
+                },
+            };
+        });
+    };
+
+    const validateFuelSelections = () => {
+        const selections = form.fuelSelections || createFuelSelectionsState();
+        const fuelRows = selections.fuels || [];
+        const lubeRows = selections.lubes || [];
+        for (const row of fuelRows) {
+            const hasAny = Boolean((row.type || '').trim() || (row.liters || '').toString().trim());
+            if (!hasAny) continue;
+            if (!row.type || !row.liters) {
+                return 'กรุณาระบุประเภทและจำนวนลิตรของน้ำมันเชื้อเพลิงให้ครบ';
+            }
+            const liters = parseFloat(row.liters);
+            if (Number.isNaN(liters) || liters <= 0) {
+                return 'จำนวนลิตรของน้ำมันเชื้อเพลิงต้องมากกว่า 0';
+            }
+        }
+        for (const row of lubeRows) {
+            const hasAny = Boolean((row.type || '').trim() || (row.grade || '').trim() || (row.liters || '').toString().trim());
+            if (!hasAny) continue;
+            if (!row.type || !row.grade || !row.liters) {
+                return 'กรุณาระบุประเภท, เบอร์/เกรด และจำนวนลิตรของน้ำมันหล่อลื่นให้ครบ';
+            }
+            const liters = parseFloat(row.liters);
+            if (Number.isNaN(liters) || liters <= 0) {
+                return 'จำนวนลิตรของน้ำมันหล่อลื่นต้องมากกว่า 0';
+            }
+        }
+        return '';
     };
 
     const handleSelectMachine = (option) => {
@@ -967,6 +1045,12 @@ export default function OilLog() {
         setSaving(true);
         setError('');
         setPhotoError('');
+        const selectionError = validateFuelSelections();
+        if (selectionError) {
+            setSaving(false);
+            setError(selectionError);
+            return;
+        }
         if (!activeFuelItems.length) {
             setSaving(false);
             setError('กรุณาเลือกประเภทน้ำมันและระบุจำนวนลิตรอย่างน้อย 1 รายการ');
@@ -1250,49 +1334,109 @@ export default function OilLog() {
                             <h3>ประเภทและปริมาณน้ำมัน</h3>
                             <p>เลือกหัวข้อที่ใช้จริง พร้อมระบุเกรดและจำนวนลิตรของแต่ละรายการ</p>
                         </header>
-                        <div className="fuel-category-grid">
-                            {fuelCategories.map((category) => {
-                                const entry = form.fuelDetails[category.id] || {};
-                                return (
-                                    <div
-                                        className={`fuel-category-card${entry.enabled ? ' fuel-category-card--active' : ''}`}
-                                        key={category.id}
-                                    >
-                                        <label className="fuel-toggle">
-                                            <input
-                                                type="checkbox"
-                                                checked={Boolean(entry.enabled)}
-                                                onChange={handleFuelToggle(category.id)}
-                                            />
-                                            <span>{category.label}</span>
+                        <div className="fuel-split-grid">
+                            <div className="fuel-panel">
+                                <div className="fuel-panel__header">น้ำมันเชื้อเพลิง</div>
+                                {(form.fuelSelections?.fuels || []).map((row, index) => (
+                                    <div className="fuel-row" key={`fuel-${index}`}>
+                                        <label>
+                                            ประเภท
+                                            <select
+                                                value={row.type}
+                                                onChange={handleFuelRowChange('fuels', index, 'type')}
+                                            >
+                                                <option value="">เลือกประเภท</option>
+                                                {fuelOptions.map((option) => (
+                                                    <option key={option.id} value={option.id}>{option.label}</option>
+                                                ))}
+                                            </select>
                                         </label>
-                                        {category.allowCode && (
-                                            <label>
-                                                {category.codeLabel || 'รายละเอียด'}
-                                                <input
-                                                    type="text"
-                                                    value={entry.code}
-                                                    onChange={handleFuelDetailChange(category.id, 'code')}
-                                                    placeholder={category.codePlaceholder}
-                                                    disabled={!entry.enabled}
-                                                />
-                                            </label>
-                                        )}
                                         <label>
                                             จำนวนลิตร
                                             <input
                                                 type="number"
                                                 inputMode="decimal"
                                                 step="0.01"
-                                                value={entry.liters}
-                                                onChange={handleFuelDetailChange(category.id, 'liters')}
+                                                value={row.liters}
+                                                onChange={handleFuelRowChange('fuels', index, 'liters')}
                                                 placeholder="0.00"
-                                                disabled={!entry.enabled}
                                             />
                                         </label>
+                                        <button
+                                            type="button"
+                                            className="fuel-row__remove"
+                                            onClick={() => handleRemoveFuelRow('fuels', index)}
+                                            disabled={(form.fuelSelections?.fuels || []).length <= 1}
+                                        >
+                                            ลบ
+                                        </button>
                                     </div>
-                                );
-                            })}
+                                ))}
+                                <button
+                                    type="button"
+                                    className="fuel-add-button"
+                                    onClick={() => handleAddFuelRow('fuels')}
+                                >
+                                    + เพิ่มน้ำมันเชื้อเพลิง
+                                </button>
+                            </div>
+                            <div className="fuel-panel">
+                                <div className="fuel-panel__header">น้ำมันหล่อลื่น</div>
+                                {(form.fuelSelections?.lubes || []).map((row, index) => (
+                                    <div className="fuel-row fuel-row--triple" key={`lube-${index}`}>
+                                        <label>
+                                            ประเภท
+                                            <select
+                                                value={row.type}
+                                                onChange={handleFuelRowChange('lubes', index, 'type')}
+                                            >
+                                                <option value="">เลือกประเภท</option>
+                                                {lubricantOptions.map((option) => (
+                                                    <option key={option.id} value={option.id}>{option.label}</option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <label>
+                                            เบอร์/เกรด
+                                            <select
+                                                value={row.grade}
+                                                onChange={handleFuelRowChange('lubes', index, 'grade')}
+                                            >
+                                                <option value="">เลือกเกรด</option>
+                                                {lubricantGradeOptions.map((grade) => (
+                                                    <option key={grade} value={grade}>{grade}</option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <label>
+                                            จำนวนลิตร
+                                            <input
+                                                type="number"
+                                                inputMode="decimal"
+                                                step="0.01"
+                                                value={row.liters}
+                                                onChange={handleFuelRowChange('lubes', index, 'liters')}
+                                                placeholder="0.00"
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            className="fuel-row__remove"
+                                            onClick={() => handleRemoveFuelRow('lubes', index)}
+                                            disabled={(form.fuelSelections?.lubes || []).length <= 1}
+                                        >
+                                            ลบ
+                                        </button>
+                                    </div>
+                                ))}
+                                <button
+                                    type="button"
+                                    className="fuel-add-button"
+                                    onClick={() => handleAddFuelRow('lubes')}
+                                >
+                                    + เพิ่มน้ำมันหล่อลื่น
+                                </button>
+                            </div>
                         </div>
                         <div className="fuel-total-pill" aria-live="polite">
                             <span>รวมปริมาณทั้งหมด</span>

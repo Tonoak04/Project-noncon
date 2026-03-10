@@ -2848,6 +2848,94 @@ header[class*="admin-"][class*="-hero"] {
     font-size: 1.1rem;
 }
 
+.fuel-split-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+}
+
+.fuel-panel {
+    border: 1px solid #dfe6f4;
+    border-radius: 18px;
+    padding: 0.95rem;
+    background: #f8fbff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.fuel-panel__header {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.fuel-row {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr) auto;
+    gap: 0.6rem;
+    align-items: end;
+    background: #ffffff;
+    border: 1px solid #e6eef8;
+    border-radius: 14px;
+    padding: 0.7rem;
+}
+
+.fuel-row--triple {
+    grid-template-columns: minmax(140px, 1.2fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
+}
+
+.fuel-row label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.fuel-row__remove {
+    align-self: center;
+    border: 1px solid rgba(15, 35, 58, 0.12);
+    background: #fff;
+    color: var(--text-primary);
+    border-radius: 12px;
+    padding: 0.45rem 0.7rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.fuel-row__remove:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.fuel-add-button {
+    align-self: flex-start;
+    border: 1px dashed rgba(15, 35, 58, 0.2);
+    background: transparent;
+    color: var(--accent);
+    border-radius: 12px;
+    padding: 0.5rem 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.fuel-add-button:hover {
+    background: rgba(31, 120, 209, 0.06);
+}
+
+@media (max-width: 720px) {
+    .fuel-row {
+        grid-template-columns: 1fr;
+    }
+
+    .fuel-row--triple {
+        grid-template-columns: 1fr;
+    }
+
+    .fuel-row__remove {
+        width: 100%;
+    }
+}
+
 .photo-upload-card {
     border: 1px dashed #c7d4eb;
     border-radius: 20px;

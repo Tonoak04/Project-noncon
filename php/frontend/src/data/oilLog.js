@@ -1,12 +1,21 @@
 export const oilChecklistOtherId = 'other';
 export const checklistOtherNoteKey = 'other_note';
 
-export const fuelCategories = [
-    { id: 'engine_oil', label: 'น้ำมันเครื่อง' },
-    { id: 'hydraulic_oil', label: 'น้ำมันไฮดรอลิค', allowCode: true, codeLabel: '#'},
-    { id: 'gear_oil', label: 'น้ำมันเกียร์', allowCode: true, codeLabel: '#'},
-    { id: 'torque_oil', label: 'น้ำมันเกียร์ทอร์ค', allowCode: true, codeLabel: '#'},
+export const fuelOptions = [
+    { id: 'diesel', label: 'ดีเซล' },
+    { id: 'gasoline', label: 'เบนซิน' },
 ];
+
+export const lubricantOptions = [
+    { id: 'engine_oil', label: 'น้ำมันเครื่อง' },
+    { id: 'hydraulic_oil', label: 'น้ำมันไฮดรอลิค' },
+    { id: 'gear_oil', label: 'น้ำมันเกียร์' },
+    { id: 'torque_oil', label: 'น้ำมันเกียร์ทอร์ค' },
+];
+
+export const lubricantGradeOptions = ['32', '46', '68', '100', '150', '220', '320', '460', '680', 'อื่นๆ'];
+
+export const fuelCategories = [...fuelOptions, ...lubricantOptions];
 
 export const oilChecklistItems = [
     { id: 'tank_level', label: 'ระดับหม้อน้ำ' },
@@ -36,14 +45,7 @@ export const createChecklistState = () => {
     return state;
 };
 
-export const createFuelDetailsState = () => {
-    const state = {};
-    fuelCategories.forEach((category) => {
-        state[category.id] = {
-            enabled: false,
-            code: '',
-            liters: '',
-        };
-    });
-    return state;
-};
+export const createFuelSelectionsState = () => ({
+    fuels: [{ type: '', liters: '' }],
+    lubes: [{ type: '', grade: '', liters: '' }],
+});
